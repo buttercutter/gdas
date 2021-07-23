@@ -4,4 +4,4 @@ A simple implementation for the GDAS paper : [Searching for A Robust Neural Arch
 TODO:
 1. Currently the search code is running without issues, but I still need to investigate the final architecture found using GDAS
 
-Credit : Thanks to @D-X-Y , @rijulg , @Unity05 and @ptrblck for their technical explanation
+Credit : Thanks to [@D-X-Y](https://github.com/D-X-Y) , [@rijulg](https://github.com/rijulg) , [@Unity05](https://github.com/Unity05) and [@ptrblck](https://github.com/ptrblck) for their technical explanation
