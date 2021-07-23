@@ -146,12 +146,21 @@ class Connection:
     def __init__(self, stride):
         super(Connection, self).__init__()
 
-        # creates distinct edges and references each of them in a list (self.edges)
-        self.linear_edge = LinearEdge()
-        self.conv2d_edge = ConvEdge(stride)
-        self.maxpool_edge = MaxPoolEdge()
-        self.avgpool_edge = AvgPoolEdge()
-        self.skip_edge = SkipEdge()
+        if USE_CUDA:
+            # creates distinct edges and references each of them in a list (self.edges)
+            self.linear_edge = LinearEdge().cuda()
+            self.conv2d_edge = ConvEdge(stride).cuda()
+            self.maxpool_edge = MaxPoolEdge().cuda()
+            self.avgpool_edge = AvgPoolEdge().cuda()
+            self.skip_edge = SkipEdge().cuda()
+
+        else:
+            # creates distinct edges and references each of them in a list (self.edges)
+            self.linear_edge = LinearEdge()
+            self.conv2d_edge = ConvEdge(stride)
+            self.maxpool_edge = MaxPoolEdge()
+            self.avgpool_edge = AvgPoolEdge()
+            self.skip_edge = SkipEdge()
 
         self.edges = [self.linear_edge, self.conv2d_edge, self.maxpool_edge, self.avgpool_edge, self.skip_edge]
         self.edge_weights = torch.zeros(NUM_OF_MIXED_OPS)
@@ -164,6 +173,9 @@ class Connection:
 
         # use linear transformation (weighted summation) to combine results from different edges
         self.combined_feature_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH])
+
+        if USE_CUDA:
+            self.combined_feature_map = self.combined_feature_map.cuda()
 
         for e in range(NUM_OF_MIXED_OPS):
             self.edge_weights[e] = self.edges[e].weights
@@ -284,8 +296,13 @@ def train_NN(forward_pass_only):
 
     for epoch in range(NUM_EPOCHS):
         for train_data, val_data in (zip(trainloader, valloader)):
+
             train_inputs, train_labels = train_data
             # val_inputs, val_labels = val_data
+
+            if USE_CUDA:
+                train_inputs = train_inputs.cuda()
+                train_labels = train_labels.cuda()
 
             if forward_pass_only == 0:
                 #  do train thing for architecture edge weights
@@ -306,11 +323,18 @@ def train_NN(forward_pass_only):
                                 # Uses feature map output from previous neighbour node for further processing
                                 x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
 
+                            if USE_CUDA:
+                                x = x.cuda()
+
                             # combines all the feature maps from different mixed ops edges
                             graph.cells[c].nodes[n].connections[cc].combined_feature_map += \
                                 graph.cells[c].nodes[n].connections[cc].edges[e].forward_edge(x)  # Ltrain(w±, alpha)
 
             outputs1 = graph.cells[NUM_OF_CELLS-1].output
+
+            if USE_CUDA:
+                outputs1 = outputs1.cuda()
+
             Ltrain = criterion(outputs1, train_labels)
 
             if forward_pass_only == 0:
@@ -346,8 +370,15 @@ def train_architecture(forward_pass_only, train_or_val='val'):
 
     for epoch in range(NUM_EPOCHS):
         for i, train_data, j, val_data in enumerate(zip(trainloader, valloader)):
+
             train_inputs, train_labels = train_data
             val_inputs, val_labels = val_data
+
+            if USE_CUDA:
+                train_inputs = train_inputs.cuda()
+                train_labels = train_labels.cuda()
+                val_inputs = val_inputs.cuda()
+                val_labels = val_labels.cuda()
 
             if forward_pass_only == 0:
                 #  do train thing for internal NN function weights
@@ -465,14 +496,18 @@ def train_architecture(forward_pass_only, train_or_val='val'):
 
 
 if __name__ == "__main__":
+    run_num = 0
     not_converged = 1
 
     while not_converged:
+        print("run_num = ", run_num)
 
         ltrain = train_NN(forward_pass_only=0)
         lval = train_architecture(forward_pass_only=0, train_or_val='val')
 
         not_converged = (lval > 0.1) or (ltrain > 0.1)
+
+        run_num = run_num + 1
 
 
     #  do test thing
