@@ -142,7 +142,7 @@ class SkipEdge(Edge):
 
 
 # to collect and manage different edges between 2 nodes
-class Connection:
+class Connection(nn.Module):
     def __init__(self, stride):
         super(Connection, self).__init__()
 
@@ -193,7 +193,7 @@ class Connection:
 
 
 # to collect and manege multiple different connections between a particular node and its neighbouring nodes
-class Node:
+class Node(nn.Module):
     def __init__(self, stride):
         super(Node, self).__init__()
 
@@ -202,7 +202,7 @@ class Node:
         # Type 2: (single edge) output connects directly to the final output node
 
         # Type 1
-        self.connections = [Connection(stride) for i in range(NUM_OF_CONNECTIONS_PER_CELL)]
+        self.connections = nn.ModuleList([Connection(stride) for i in range(NUM_OF_CONNECTIONS_PER_CELL)])
 
         # Type 2
         # depends on PREVIOUS node's Type 1 output
@@ -210,7 +210,7 @@ class Node:
 
 
 # to manage all nodes within a cell
-class Cell:
+class Cell(nn.Module):
     def __init__(self, stride):
         super(Cell, self).__init__()
 
@@ -223,7 +223,7 @@ class Cell:
         # as well as the output of the previous two cells, c_{k-2} and c_{k-1} (after a preprocessing layer).
         # previous_previous_cell_output = c_{k-2}
         # previous_cell_output = c{k-1}
-        self.nodes = [Node(stride) for i in range(NUM_OF_NODES_IN_EACH_CELL)]
+        self.nodes = nn.ModuleList([Node(stride) for i in range(NUM_OF_NODES_IN_EACH_CELL)])
 
         # just for variables initialization
         self.previous_cell = 0
@@ -238,7 +238,7 @@ class Cell:
 
 
 # to manage all nodes
-class Graph:
+class Graph(nn.Module):
     def __init__(self):
         super(Graph, self).__init__()
 
@@ -250,7 +250,7 @@ class Graph:
             else:
                 stride = NORMAL_STRIDE  # normal cell
 
-        self.cells = [Cell(stride) for i in range(NUM_OF_CELLS)]
+        self.cells = nn.ModuleList([Cell(stride) for i in range(NUM_OF_CELLS)])
 
         # https://www.reddit.com/r/learnpython/comments/no7btk/how_to_carry_extra_information_across_dag/
         # https://docs.python.org/3/tutorial/datastructures.html
@@ -282,14 +282,13 @@ class Graph:
 
 # https://translate.google.com/translate?sl=auto&tl=en&u=http://khanrc.github.io/nas-4-darts-tutorial.html
 def train_NN(forward_pass_only):
-    edge = Edge()
     graph = Graph()
 
     if USE_CUDA:
-        edge = edge.cuda()
+        graph = graph.cuda()
 
     criterion = nn.CrossEntropyLoss()
-    optimizer1 = optim.SGD(edge.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
+    optimizer1 = optim.SGD(graph.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
 
     # just for initialization, no special meaning
     Ltrain = 0
@@ -306,7 +305,7 @@ def train_NN(forward_pass_only):
 
             if forward_pass_only == 0:
                 #  do train thing for architecture edge weights
-                edge.train()
+                graph.train()
 
                 # zero the parameter gradients
                 optimizer1.zero_grad()
@@ -356,14 +355,13 @@ def train_NN(forward_pass_only):
 
 
 def train_architecture(forward_pass_only, train_or_val='val'):
-    edge = Edge()
     graph = Graph()
 
     if USE_CUDA:
-        edge = edge.cuda()
+        graph = graph.cuda()
 
     criterion = nn.CrossEntropyLoss()
-    optimizer2 = optim.SGD(edge.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
+    optimizer2 = optim.SGD(graph.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
 
     # just for initialization, no special meaning
     Lval = 0
@@ -382,7 +380,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
 
             if forward_pass_only == 0:
                 #  do train thing for internal NN function weights
-                edge.train()
+                graph.train()
 
                 # zero the parameter gradients
                 optimizer2.zero_grad()
