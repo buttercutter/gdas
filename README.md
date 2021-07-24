@@ -4,6 +4,6 @@ A simple implementation for the GDAS paper : [Searching for A Robust Neural Arch
 Note: The coding is still a work-in-progress and is still under development
 
 TODO:
-1. Currently the search code is running without issues except for extreme memory usage, but I still need to double-check the search training process and then only investigate the final architecture found using GDAS
+1. Currently the search code has extreme memory usage issues, and I also still need to double-check the search training process and then only investigate the final architecture found using GDAS
 
-Credit : Thanks to [@D-X-Y](https://github.com/D-X-Y) , [@rijulg](https://github.com/rijulg) , [@Unity05](https://github.com/Unity05) and [@ptrblck](https://github.com/ptrblck) for their technical explanation
+Credit : Thanks to [@D-X-Y](https://github.com/D-X-Y) , [@rijulg](https://github.com/rijulg) , [@andreaskoepf](https://github.com/andreaskoepf) , [@Unity05](https://github.com/Unity05) and [@ptrblck](https://github.com/ptrblck) for their technical explanation
