@@ -225,11 +225,6 @@ class Cell(nn.Module):
         # previous_cell_output = c{k-1}
         self.nodes = nn.ModuleList([Node(stride) for i in range(NUM_OF_NODES_IN_EACH_CELL)])
 
-        for n in range(NUM_OF_NODES_IN_EACH_CELL):
-            for c in range(NUM_OF_CONNECTIONS_PER_CELL):
-                for m in range(NUM_OF_MIXED_OPS):
-                    self.nodes[n].output += self.nodes[n-1].connections[c].edge_weights[m]
-
         # just for variables initialization
         self.previous_cell = 0
         self.previous_previous_cell = 0
@@ -272,17 +267,20 @@ class Graph(nn.Module):
                 self.cells[c].previous_previous_cell = self.cells[c - PREVIOUS_PREVIOUS].output
 
             for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                if n > 0:
-                    # depends on PREVIOUS node's Type 1 connection
-                    # needs to take care tensor dimension mismatch from multiple edges connections
-                    self.cells[c].nodes[n].output = self.cells[c].nodes[n - 1].connections
+                for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+                    for m in range(NUM_OF_MIXED_OPS):
+                        if n > 0:
+                            # depends on PREVIOUS node's Type 1 connection
+                            # needs to take care tensor dimension mismatch from multiple edges connections
+                            self.cells[c].nodes[n].output += self.cells[c].nodes[n - 1].connections[cc].edge_weights[m]
 
-                else:  # n == 0
-                    if c > 1:  # there is no input from previous cells for the first two cells
-                        # needs to take care tensor dimension mismatch from multiple edges connections
-                        self.cells[c].nodes[n].output = self.cells[c].nodes[n - 1].connections + \
-                                        self.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections + \
-                                        self.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections
+                        else:  # n == 0
+                            if c > 1:  # there is no input from previous cells for the first two cells
+                                # needs to take care tensor dimension mismatch from multiple edges connections
+                                self.cells[c].nodes[n].output += \
+                                    self.cells[c].nodes[n - 1].connections[cc].edge_weights[m] + \
+                                    self.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edge_weights[m] + \
+                                    self.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edge_weights[m]
 
 
 # https://translate.google.com/translate?sl=auto&tl=en&u=http://khanrc.github.io/nas-4-darts-tutorial.html
