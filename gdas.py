@@ -23,7 +23,7 @@ IMAGE_WIDTH = 32
 NUM_OF_IMAGE_CLASSES = 10
 
 SIZE_OF_HIDDEN_LAYERS = 64
-NUM_EPOCHS = 50
+NUM_EPOCHS = 1
 LEARNING_RATE = 0.025
 MOMENTUM = 0.9
 NUM_OF_CELLS = 8
@@ -192,7 +192,7 @@ class Connection(nn.Module):
         self.chosen_edge = np.argmax(gumbel.detach().numpy(), axis=0)  # converts one-hot encoding into integer
 
 
-# to collect and manege multiple different connections between a particular node and its neighbouring nodes
+# to collect and manage multiple different connections between a particular node and its neighbouring nodes
 class Node(nn.Module):
     def __init__(self, stride):
         super(Node, self).__init__()
@@ -224,6 +224,11 @@ class Cell(nn.Module):
         # previous_previous_cell_output = c_{k-2}
         # previous_cell_output = c{k-1}
         self.nodes = nn.ModuleList([Node(stride) for i in range(NUM_OF_NODES_IN_EACH_CELL)])
+
+        for n in range(NUM_OF_NODES_IN_EACH_CELL):
+            for c in range(NUM_OF_CONNECTIONS_PER_CELL):
+                for m in range(NUM_OF_MIXED_OPS):
+                    self.nodes[n].output += self.nodes[n-1].connections[c].edge_weights[m]
 
         # just for variables initialization
         self.previous_cell = 0
