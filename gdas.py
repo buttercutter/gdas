@@ -110,7 +110,7 @@ class Edge(nn.Module):
 class ConvEdge(Edge):
     def __init__(self, stride):
         super().__init__()
-        self.f = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=(3, 3), stride=(stride, stride))
+        self.f = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(3, 3), stride=(stride, stride), padding=1)
 
 
 class LinearEdge(Edge):
