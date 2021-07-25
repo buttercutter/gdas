@@ -120,15 +120,15 @@ class LinearEdge(Edge):
 
 
 class MaxPoolEdge(Edge):
-    def __init__(self):
+    def __init__(self, stride):
         super().__init__()
-        self.f = nn.MaxPool2d(kernel_size=3)
+        self.f = nn.MaxPool2d(kernel_size=3, stride=stride, padding=1, ceil_mode=True)
 
 
 class AvgPoolEdge(Edge):
-    def __init__(self):
+    def __init__(self, stride):
         super().__init__()
-        self.f = nn.AvgPool2d(kernel_size=3)
+        self.f = nn.AvgPool2d(kernel_size=3, stride=stride, padding=1, ceil_mode=True)
 
 
 class Skip(nn.Module):
@@ -150,16 +150,16 @@ class Connection(nn.Module):
             # creates distinct edges and references each of them in a list (self.edges)
             #self.linear_edge = LinearEdge().cuda()
             self.conv2d_edge = ConvEdge(stride).cuda()
-            self.maxpool_edge = MaxPoolEdge().cuda()
-            self.avgpool_edge = AvgPoolEdge().cuda()
+            self.maxpool_edge = MaxPoolEdge(stride).cuda()
+            self.avgpool_edge = AvgPoolEdge(stride).cuda()
             self.skip_edge = SkipEdge().cuda()
 
         else:
             # creates distinct edges and references each of them in a list (self.edges)
             #self.linear_edge = LinearEdge()
             self.conv2d_edge = ConvEdge(stride)
-            self.maxpool_edge = MaxPoolEdge()
-            self.avgpool_edge = AvgPoolEdge()
+            self.maxpool_edge = MaxPoolEdge(stride)
+            self.avgpool_edge = AvgPoolEdge(stride)
             self.skip_edge = SkipEdge()
 
         self.edges = [self.conv2d_edge, self.maxpool_edge, self.avgpool_edge, self.skip_edge]
