@@ -432,6 +432,9 @@ def train_architecture(forward_pass_only, train_or_val='val'):
 
         outputs2 = graph.cells[NUM_OF_CELLS-1].output
 
+        if USE_CUDA:
+            outputs2 = outputs2.cuda()
+
         if train_or_val == 'val':
             loss = criterion(outputs2, val_labels)
 
@@ -525,6 +528,7 @@ if __name__ == "__main__":
         ltrain = train_NN(forward_pass_only=0)
         print("Finished train_NN()")
 
+        # 'train_or_val' to differentiate between using training dataset and validation dataset
         lval = train_architecture(forward_pass_only=0, train_or_val='val')
         print("Finished train_architecture()")
 
