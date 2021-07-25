@@ -27,7 +27,7 @@ NUM_EPOCHS = 1
 LEARNING_RATE = 0.025
 MOMENTUM = 0.9
 NUM_OF_CELLS = 8
-NUM_OF_MIXED_OPS = 5
+NUM_OF_MIXED_OPS = 4
 NUM_OF_PREVIOUS_CELLS_OUTPUTS = 2  # last_cell_output , second_last_cell_output
 NUM_OF_NODES_IN_EACH_CELL = 4
 NUM_OF_CONNECTIONS_PER_CELL = NUM_OF_PREVIOUS_CELLS_OUTPUTS + NUM_OF_NODES_IN_EACH_CELL
@@ -148,7 +148,7 @@ class Connection(nn.Module):
 
         if USE_CUDA:
             # creates distinct edges and references each of them in a list (self.edges)
-            self.linear_edge = LinearEdge().cuda()
+            #self.linear_edge = LinearEdge().cuda()
             self.conv2d_edge = ConvEdge(stride).cuda()
             self.maxpool_edge = MaxPoolEdge().cuda()
             self.avgpool_edge = AvgPoolEdge().cuda()
@@ -156,13 +156,13 @@ class Connection(nn.Module):
 
         else:
             # creates distinct edges and references each of them in a list (self.edges)
-            self.linear_edge = LinearEdge()
+            #self.linear_edge = LinearEdge()
             self.conv2d_edge = ConvEdge(stride)
             self.maxpool_edge = MaxPoolEdge()
             self.avgpool_edge = AvgPoolEdge()
             self.skip_edge = SkipEdge()
 
-        self.edges = [self.linear_edge, self.conv2d_edge, self.maxpool_edge, self.avgpool_edge, self.skip_edge]
+        self.edges = [self.conv2d_edge, self.maxpool_edge, self.avgpool_edge, self.skip_edge]
         self.edge_weights = torch.zeros(NUM_OF_MIXED_OPS)
 
         # for approximate architecture gradient
