@@ -366,6 +366,8 @@ def train_NN(forward_pass_only):
 
 
 def train_architecture(forward_pass_only, train_or_val='val'):
+    print("Entering train_architecture(), forward_pass_only = ", forward_pass_only, " , train_or_val = " , train_or_val)
+
     graph = Graph()
 
     if USE_CUDA:
@@ -387,6 +389,8 @@ def train_architecture(forward_pass_only, train_or_val='val'):
 
         # zero the parameter gradients
         optimizer2.zero_grad()
+
+    print("before multiple for-loops")
 
     for train_data, val_data in (zip(trainloader, valloader)):
 
@@ -503,6 +507,8 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                 for e in range(NUM_OF_MIXED_OPS):
                     for w in graph.cells[c].nodes[n].connections[cc].edges[e].parameters():
                         w = CC.f_weights_backup[e]
+
+    print("after multiple for-loops")
 
     L2train_Lval = (Ltrain_plus - Ltrain_minus) / (2 * epsilon)
 
