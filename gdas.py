@@ -92,7 +92,7 @@ class Edge(nn.Module):
     # for NN functions internal weights training
     def forward_f(self, x):
         self.__unfreeze_f()
-        self.__freeeze_w()
+        self.__freeze_w()
 
         # inheritance in python classes and SOLID principles
         # https://en.wikipedia.org/wiki/SOLID
@@ -285,6 +285,8 @@ class Graph(nn.Module):
 
 # https://translate.google.com/translate?sl=auto&tl=en&u=http://khanrc.github.io/nas-4-darts-tutorial.html
 def train_NN(forward_pass_only):
+    print("Entering train_NN(), forward_pass_only = ", forward_pass_only)
+
     graph = Graph()
 
     if USE_CUDA:
@@ -295,64 +297,70 @@ def train_NN(forward_pass_only):
 
     # just for initialization, no special meaning
     Ltrain = 0
+    train_inputs = 0
+    train_labels = 0
+
+    if forward_pass_only == 0:
+        #  do train thing for architecture edge weights
+        graph.train()
+
+        # zero the parameter gradients
+        optimizer1.zero_grad()
+
+    print("before multiple for-loops")
+
+    for train_data, val_data in (zip(trainloader, valloader)):
+
+        train_inputs, train_labels = train_data
+        # val_inputs, val_labels = val_data
+
+        if USE_CUDA:
+            train_inputs = train_inputs.cuda()
+            train_labels = train_labels.cuda()
 
     for epoch in range(NUM_EPOCHS):
-        for train_data, val_data in (zip(trainloader, valloader)):
+        # forward pass
+        for c in range(NUM_OF_CELLS):
+            for n in range(NUM_OF_NODES_IN_EACH_CELL):
+                for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+                    for e in range(NUM_OF_MIXED_OPS):
+                        if c == 0:
+                            x = train_inputs
 
-            train_inputs, train_labels = train_data
-            # val_inputs, val_labels = val_data
+                        else:
+                            # Uses feature map output from previous neighbour node for further processing
+                            x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
 
-            if USE_CUDA:
-                train_inputs = train_inputs.cuda()
-                train_labels = train_labels.cuda()
+                        if USE_CUDA:
+                            x = x.cuda()
 
-            if forward_pass_only == 0:
-                #  do train thing for architecture edge weights
-                graph.train()
+                        # combines all the feature maps from different mixed ops edges
+                        graph.cells[c].nodes[n].connections[cc].combined_feature_map += \
+                            graph.cells[c].nodes[n].connections[cc].edges[e].forward_edge(x)  # Ltrain(w±, alpha)
 
-                # zero the parameter gradients
-                optimizer1.zero_grad()
+        outputs1 = graph.cells[NUM_OF_CELLS-1].output
 
-            # forward pass
-            for c in range(NUM_OF_CELLS):
-                for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                    for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
-                        for e in range(NUM_OF_MIXED_OPS):
-                            if c == 0:
-                                x = train_inputs
+        if USE_CUDA:
+            outputs1 = outputs1.cuda()
 
-                            else:
-                                # Uses feature map output from previous neighbour node for further processing
-                                x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
+        Ltrain = criterion(outputs1, train_labels)
 
-                            if USE_CUDA:
-                                x = x.cuda()
+        if forward_pass_only == 0:
+            # backward pass
+            Ltrain = Ltrain.requires_grad_()
+            Ltrain.backward()
+            optimizer1.step()
 
-                            # combines all the feature maps from different mixed ops edges
-                            graph.cells[c].nodes[n].connections[cc].combined_feature_map += \
-                                graph.cells[c].nodes[n].connections[cc].edges[e].forward_edge(x)  # Ltrain(w±, alpha)
+        else:
+            # no need to save model parameters for next epoch
+            return Ltrain
 
-            outputs1 = graph.cells[NUM_OF_CELLS-1].output
+        # DARTS's approximate architecture gradient. Refer to equation (8)
+        # needs to save intermediate trained model for Ltrain
+        path = './model.pth'
+        torch.save(graph, path)
 
-            if USE_CUDA:
-                outputs1 = outputs1.cuda()
-
-            Ltrain = criterion(outputs1, train_labels)
-
-            if forward_pass_only == 0:
-                # backward pass
-                Ltrain = Ltrain.requires_grad_()
-                Ltrain.backward()
-                optimizer1.step()
-
-            else:
-                # no need to save model parameters for next epoch
-                return Ltrain
-
-            # DARTS's approximate architecture gradient. Refer to equation (8)
-            # needs to save intermediate trained model for Ltrain
-            path = './model.pth'
-            torch.save(graph, path)
+    print("after multiple for-loops")
 
     return Ltrain
 
@@ -368,69 +376,74 @@ def train_architecture(forward_pass_only, train_or_val='val'):
 
     # just for initialization, no special meaning
     Lval = 0
+    train_inputs = 0
+    train_labels = 0
+    val_inputs = 0
+    val_labels = 0
+
+    if forward_pass_only == 0:
+        #  do train thing for internal NN function weights
+        graph.train()
+
+        # zero the parameter gradients
+        optimizer2.zero_grad()
+
+    for train_data, val_data in (zip(trainloader, valloader)):
+
+        train_inputs, train_labels = train_data
+        val_inputs, val_labels = val_data
+
+        if USE_CUDA:
+            train_inputs = train_inputs.cuda()
+            train_labels = train_labels.cuda()
+            val_inputs = val_inputs.cuda()
+            val_labels = val_labels.cuda()
 
     for epoch in range(NUM_EPOCHS):
-        for i, train_data, j, val_data in enumerate(zip(trainloader, valloader)):
 
-            train_inputs, train_labels = train_data
-            val_inputs, val_labels = val_data
+        # forward pass
+        # use linear transformation ('weighted sum then concat') to combine results from different nodes
+        # into an output feature map to be fed into the next neighbour node for further processing
+        for c in range(NUM_OF_CELLS):
+            for n in range(NUM_OF_NODES_IN_EACH_CELL):
+                for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+                    for e in range(NUM_OF_MIXED_OPS):
+                        x = 0  # depends on the input tensor dimension requirement
 
-            if USE_CUDA:
-                train_inputs = train_inputs.cuda()
-                train_labels = train_labels.cuda()
-                val_inputs = val_inputs.cuda()
-                val_labels = val_labels.cuda()
-
-            if forward_pass_only == 0:
-                #  do train thing for internal NN function weights
-                graph.train()
-
-                # zero the parameter gradients
-                optimizer2.zero_grad()
-
-            # forward pass
-            # use linear transformation ('weighted sum then concat') to combine results from different nodes
-            # into an output feature map to be fed into the next neighbour node for further processing
-            for c in range(NUM_OF_CELLS):
-                for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                    for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
-                        for e in range(NUM_OF_MIXED_OPS):
-                            x = 0  # depends on the input tensor dimension requirement
-
-                            if c == 0:
-                                if train_or_val == 'val':
-                                    x = val_inputs
-
-                                else:
-                                    x = train_inputs
+                        if c == 0:
+                            if train_or_val == 'val':
+                                x = val_inputs
 
                             else:
-                                # Uses feature map output from previous neighbour node for further processing
-                                x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
+                                x = train_inputs
 
-                            # need to take care of tensors dimension mismatch
-                            graph.cells[c].nodes[n].connections[cc].combined_feature_map += \
-                                graph.cells[c].nodes[n].connections[cc].edge_weights[e] * \
-                                graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Lval(w*, alpha)
+                        else:
+                            # Uses feature map output from previous neighbour node for further processing
+                            x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
 
-            outputs2 = graph.cells[NUM_OF_CELLS-1].output
+                        # need to take care of tensors dimension mismatch
+                        graph.cells[c].nodes[n].connections[cc].combined_feature_map += \
+                            graph.cells[c].nodes[n].connections[cc].edge_weights[e] * \
+                            graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Lval(w*, alpha)
 
-            if train_or_val == 'val':
-                loss = criterion(outputs2, val_labels)
+        outputs2 = graph.cells[NUM_OF_CELLS-1].output
 
-            else:
-                loss = criterion(outputs2, train_labels)
+        if train_or_val == 'val':
+            loss = criterion(outputs2, val_labels)
 
-            if forward_pass_only == 0:
-                # backward pass
-                Lval = loss
-                Lval = Lval.requires_grad_()
-                Lval.backward()
-                optimizer2.step()
+        else:
+            loss = criterion(outputs2, train_labels)
 
-            else:
-                # no need to save model parameters for next epoch
-                return loss
+        if forward_pass_only == 0:
+            # backward pass
+            Lval = loss
+            Lval = Lval.requires_grad_()
+            Lval.backward()
+            optimizer2.step()
+
+        else:
+            # no need to save model parameters for next epoch
+            return loss
 
     # DARTS's approximate architecture gradient. Refer to equation (8)
     # needs to save intermediate trained model for Lval
@@ -504,7 +517,10 @@ if __name__ == "__main__":
         print("run_num = ", run_num)
 
         ltrain = train_NN(forward_pass_only=0)
+        print("Finished train_NN()")
+
         lval = train_architecture(forward_pass_only=0, train_or_val='val')
+        print("Finished train_architecture()")
 
         not_converged = (lval > 0.1) or (ltrain > 0.1)
 
