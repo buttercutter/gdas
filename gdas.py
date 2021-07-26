@@ -11,7 +11,6 @@ import torchvision.transforms as transforms
 
 import numpy as np
 
-
 USE_CUDA = torch.cuda.is_available()
 
 # https://arxiv.org/pdf/1806.09055.pdf#page=12
@@ -39,7 +38,6 @@ NORMAL_STRIDE = 1
 TAU_GUMBEL = 0.5
 EDGE_WEIGHTS_NETWORK_IN_SIZE = 5
 EDGE_WEIGHTS_NETWORK_OUT_SIZE = 2
-
 
 # https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
 transform = transforms.Compose(
@@ -73,7 +71,7 @@ class Edge(nn.Module):
         # self.linear = nn.Linear(EDGE_WEIGHTS_NETWORK_IN_SIZE, EDGE_WEIGHTS_NETWORK_OUT_SIZE)
         # https://pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html
         self.weights = nn.Parameter(torch.zeros(1),
-                                           requires_grad=True)  # for edge weights, not for internal NN function weights
+                                    requires_grad=True)  # for edge weights, not for internal NN function weights
 
     def __freeze_w(self):
         self.weights.requires_grad = False
@@ -135,6 +133,7 @@ class Skip(nn.Module):
     def forward(self, x):
         return x
 
+
 class SkipEdge(Edge):
     def __init__(self):
         super().__init__()
@@ -148,7 +147,7 @@ class Connection(nn.Module):
 
         if USE_CUDA:
             # creates distinct edges and references each of them in a list (self.edges)
-            #self.linear_edge = LinearEdge().cuda()
+            # self.linear_edge = LinearEdge().cuda()
             self.conv2d_edge = ConvEdge(stride).cuda()
             self.maxpool_edge = MaxPoolEdge(stride).cuda()
             self.avgpool_edge = AvgPoolEdge(stride).cuda()
@@ -156,7 +155,7 @@ class Connection(nn.Module):
 
         else:
             # creates distinct edges and references each of them in a list (self.edges)
-            #self.linear_edge = LinearEdge()
+            # self.linear_edge = LinearEdge()
             self.conv2d_edge = ConvEdge(stride)
             self.maxpool_edge = MaxPoolEdge(stride)
             self.avgpool_edge = AvgPoolEdge(stride)
@@ -181,7 +180,7 @@ class Connection(nn.Module):
             self.edge_weights[e] = self.edges[e].weights
 
             # https://stackoverflow.com/a/45024500/8776167 extracts the weights learned through NN functions
-            self.f_weights[e] = list(self.edges[e].parameters())
+            # self.f_weights[e] = list(self.edges[e].parameters())
 
         # Refer to GDAS equations (5) and (6)
         # if one_hot is already there, would summation be required given that all other entries are forced to 0 ?
@@ -264,7 +263,7 @@ class Graph(nn.Module):
         for c in range(NUM_OF_CELLS):
             if c > 1:  # for previous_previous_cell, (c-2)
                 self.cells[c].previous_cell = self.cells[c-1].output
-                self.cells[c].previous_previous_cell = self.cells[c - PREVIOUS_PREVIOUS].output
+                self.cells[c].previous_previous_cell = self.cells[c-PREVIOUS_PREVIOUS].output
 
             for n in range(NUM_OF_NODES_IN_EACH_CELL):
                 for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
@@ -272,15 +271,17 @@ class Graph(nn.Module):
                         if n > 0:
                             # depends on PREVIOUS node's Type 1 connection
                             # needs to take care tensor dimension mismatch from multiple edges connections
-                            self.cells[c].nodes[n].output += self.cells[c].nodes[n - 1].connections[cc].edge_weights[m]
+                            self.cells[c].nodes[n].output += self.cells[c].nodes[n-1].connections[cc].edge_weights[m]
 
                         else:  # n == 0
                             if c > 1:  # there is no input from previous cells for the first two cells
                                 # needs to take care tensor dimension mismatch from multiple edges connections
                                 self.cells[c].nodes[n].output += \
-                                    self.cells[c].nodes[n - 1].connections[cc].edge_weights[m] + \
-                                    self.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edge_weights[m] + \
-                                    self.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edge_weights[m]
+                                    self.cells[c].nodes[n-1].connections[cc].edge_weights[m] + \
+                                    self.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edge_weights[
+                                        m] + \
+                                    self.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[
+                                        cc].edge_weights[m]
 
 
 # https://translate.google.com/translate?sl=auto&tl=en&u=http://khanrc.github.io/nas-4-darts-tutorial.html
@@ -366,7 +367,7 @@ def train_NN(forward_pass_only):
 
 
 def train_architecture(forward_pass_only, train_or_val='val'):
-    print("Entering train_architecture(), forward_pass_only = ", forward_pass_only, " , train_or_val = " , train_or_val)
+    print("Entering train_architecture(), forward_pass_only = ", forward_pass_only, " , train_or_val = ", train_or_val)
 
     graph = Graph()
 
@@ -537,5 +538,5 @@ if __name__ == "__main__":
 
         run_num = run_num + 1
 
-
     #  do test thing
+
