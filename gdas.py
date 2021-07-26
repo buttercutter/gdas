@@ -466,14 +466,14 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                 CC = graph.cells[c].nodes[n].connections[cc]
 
                 for e in range(NUM_OF_MIXED_OPS):
-                    for w in graph.cells[c].nodes[n].connections[cc].edges[e].parameters():
+                    for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
                         # https://mythrex.github.io/math_behind_darts/
                         # Finite Difference Method
-                        CC.weight_plus[e] = w + epsilon * Lval
-                        CC.weight_minus[e] = w - epsilon * Lval
+                        CC.weight_plus = w + epsilon * Lval
+                        CC.weight_minus = w - epsilon * Lval
 
                         # Backups original f_weights
-                        CC.f_weights_backup[e] = w
+                        CC.f_weights_backup = w
 
     # replaces f_weights with weight_plus before NN training
     for c in range(NUM_OF_CELLS):
@@ -482,8 +482,8 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                 CC = graph.cells[c].nodes[n].connections[cc]
 
                 for e in range(NUM_OF_MIXED_OPS):
-                    for w in graph.cells[c].nodes[n].connections[cc].edges[e].parameters():
-                        w = CC.weight_plus[e]
+                    for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
+                        w = CC.weight_plus
 
     # test NN to obtain loss
     Ltrain_plus = train_architecture(forward_pass_only=1, train_or_val='train')
@@ -495,8 +495,8 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                 CC = graph.cells[c].nodes[n].connections[cc]
 
                 for e in range(NUM_OF_MIXED_OPS):
-                    for w in graph.cells[c].nodes[n].connections[cc].edges[e].parameters():
-                        w = CC.weight_minus[e]
+                    for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
+                        w = CC.weight_minus
 
     # test NN to obtain loss
     Ltrain_minus = train_architecture(forward_pass_only=1, train_or_val='train')
@@ -508,8 +508,8 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                 CC = graph.cells[c].nodes[n].connections[cc]
 
                 for e in range(NUM_OF_MIXED_OPS):
-                    for w in graph.cells[c].nodes[n].connections[cc].edges[e].parameters():
-                        w = CC.f_weights_backup[e]
+                    for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
+                        w = CC.f_weights_backup
 
     print("after multiple for-loops")
 
