@@ -532,7 +532,8 @@ if __name__ == "__main__":
         lval = train_architecture(forward_pass_only=0, train_or_val='val')
         print("Finished train_architecture()")
 
-        not_converged = (lval > 0.1) or (ltrain > 0.1)
+        print("lval = ", lval, " , ltrain = ", ltrain)
+        not_converged = (lval > 0.01) or (ltrain > 0.01)
 
         run_num = run_num + 1
 
