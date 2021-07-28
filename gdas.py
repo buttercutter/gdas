@@ -9,7 +9,7 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 
-import numpy as np
+# import numpy as np
 
 USE_CUDA = torch.cuda.is_available()
 
@@ -162,22 +162,26 @@ class Connection(nn.Module):
             self.skip_edge = SkipEdge()
 
         self.edges = [self.conv2d_edge, self.maxpool_edge, self.avgpool_edge, self.skip_edge]
-        self.edge_weights = torch.zeros(NUM_OF_MIXED_OPS)
+        self.edge_weights = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
 
         # for approximate architecture gradient
         self.f_weights = [None] * NUM_OF_MIXED_OPS
         self.f_weights_backup = [None] * NUM_OF_MIXED_OPS
-        self.weight_plus = torch.zeros(NUM_OF_MIXED_OPS)
-        self.weight_minus = torch.zeros(NUM_OF_MIXED_OPS)
+        self.weight_plus = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
+        self.weight_minus = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
 
         # use linear transformation (weighted summation) to combine results from different edges
-        self.combined_feature_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH])
+        self.combined_feature_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
+                                                requires_grad=True)
 
         if USE_CUDA:
             self.combined_feature_map = self.combined_feature_map.cuda()
 
         for e in range(NUM_OF_MIXED_OPS):
-            self.edge_weights[e] = self.edges[e].weights
+            with torch.no_grad():
+                self.edge_weights[e] = self.edges[e].weights
+
+            print("self.edge_weights[e].grad_fn = ", self.edge_weights[e].grad_fn)
 
             # https://stackoverflow.com/a/45024500/8776167 extracts the weights learned through NN functions
             # self.f_weights[e] = list(self.edges[e].parameters())
@@ -188,7 +192,7 @@ class Connection(nn.Module):
         # https://pytorch.org/docs/stable/nn.functional.html#gumbel-softmax
 
         gumbel = F.gumbel_softmax(self.edge_weights, tau=TAU_GUMBEL, hard=True)
-        self.chosen_edge = np.argmax(gumbel.detach().numpy(), axis=0)  # converts one-hot encoding into integer
+        self.chosen_edge = torch.argmax(gumbel, dim=0)  # converts one-hot encoding into integer
 
 
 # to collect and manage multiple different connections between a particular node and its neighbouring nodes
@@ -205,7 +209,7 @@ class Node(nn.Module):
 
         # Type 2
         # depends on PREVIOUS node's Type 1 output
-        self.output = torch.zeros(NUM_OF_IMAGE_CLASSES)  # for initialization
+        self.output = torch.zeros(NUM_OF_IMAGE_CLASSES, requires_grad=True)  # for initialization
 
 
 # to manage all nodes within a cell
@@ -227,13 +231,14 @@ class Cell(nn.Module):
         # just for variables initialization
         self.previous_cell = 0
         self.previous_previous_cell = 0
-        self.output = torch.zeros(NUM_OF_NODES_IN_EACH_CELL, NUM_OF_IMAGE_CLASSES)
+        self.output = torch.zeros(NUM_OF_NODES_IN_EACH_CELL, NUM_OF_IMAGE_CLASSES, requires_grad=True)
 
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # 'add' then 'concat' feature maps from different nodes
             # needs to take care of tensor dimension mismatch
             # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
-            self.output += self.nodes[n].output
+            with torch.no_grad():
+                self.output += self.nodes[n].output
 
 
 # to manage all nodes
@@ -268,27 +273,34 @@ class Graph(nn.Module):
             for n in range(NUM_OF_NODES_IN_EACH_CELL):
                 for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
                     for m in range(NUM_OF_MIXED_OPS):
+                        # with torch.no_grad():
                         if n > 0:
                             # depends on PREVIOUS node's Type 1 connection
                             # needs to take care tensor dimension mismatch from multiple edges connections
-                            self.cells[c].nodes[n].output += self.cells[c].nodes[n-1].connections[cc].edge_weights[m]
+                            self.cells[c].nodes[n].output = self.cells[c].nodes[n].output + \
+                                self.cells[c].nodes[n-1].connections[cc].edge_weights[m]
 
                         else:  # n == 0
                             if c > 1:  # there is no input from previous cells for the first two cells
                                 # needs to take care tensor dimension mismatch from multiple edges connections
-                                self.cells[c].nodes[n].output += \
+                                self.cells[c].nodes[n].output = self.cells[c].nodes[n].output + \
                                     self.cells[c].nodes[n-1].connections[cc].edge_weights[m] + \
-                                    self.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edge_weights[
-                                        m] + \
-                                    self.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[
-                                        cc].edge_weights[m]
+                                    self.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edge_weights[m] + \
+                                    self.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edge_weights[m]
 
+                            else:
+                                self.cells[c].nodes[n].output = self.cells[c].nodes[n].connections[cc].edge_weights[m]
+
+                        print("self.cells[", c, "].nodes[", n, "].output.grad_fn = ", self.cells[c].nodes[n].output.grad_fn)
 
 # https://translate.google.com/translate?sl=auto&tl=en&u=http://khanrc.github.io/nas-4-darts-tutorial.html
 def train_NN(forward_pass_only):
     print("Entering train_NN(), forward_pass_only = ", forward_pass_only)
 
     graph = Graph()
+
+    # for param in graph.parameters():
+    #    print(param.grad)
 
     if USE_CUDA:
         graph = graph.cuda()
@@ -370,6 +382,9 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     print("Entering train_architecture(), forward_pass_only = ", forward_pass_only, " , train_or_val = ", train_or_val)
 
     graph = Graph()
+
+    # for param in graph.parameters():
+    #    print(param.grad)
 
     if USE_CUDA:
         graph = graph.cuda()
