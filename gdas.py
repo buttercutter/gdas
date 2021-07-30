@@ -293,14 +293,12 @@ class Graph(nn.Module):
 
                         print("self.cells[", c, "].nodes[", n, "].output.grad_fn = ", self.cells[c].nodes[n].output.grad_fn)
 
+
 # https://translate.google.com/translate?sl=auto&tl=en&u=http://khanrc.github.io/nas-4-darts-tutorial.html
 def train_NN(forward_pass_only):
     print("Entering train_NN(), forward_pass_only = ", forward_pass_only)
 
     graph = Graph()
-
-    # for param in graph.parameters():
-    #    print(param.grad)
 
     if USE_CUDA:
         graph = graph.cuda()
@@ -362,6 +360,10 @@ def train_NN(forward_pass_only):
             # backward pass
             Ltrain = Ltrain.requires_grad_()
             Ltrain.backward()
+
+            for name, param in graph.named_parameters():
+                print(name, param.grad)
+
             optimizer1.step()
 
         else:
@@ -382,9 +384,6 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     print("Entering train_architecture(), forward_pass_only = ", forward_pass_only, " , train_or_val = ", train_or_val)
 
     graph = Graph()
-
-    # for param in graph.parameters():
-    #    print(param.grad)
 
     if USE_CUDA:
         graph = graph.cuda()
@@ -462,6 +461,10 @@ def train_architecture(forward_pass_only, train_or_val='val'):
             Lval = loss
             Lval = Lval.requires_grad_()
             Lval.backward()
+
+            for name, param in graph.named_parameters():
+                print(name, param.grad)
+
             optimizer2.step()
 
         else:
