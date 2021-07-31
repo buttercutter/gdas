@@ -181,8 +181,6 @@ class Connection(nn.Module):
             with torch.no_grad():
                 self.edge_weights[e] = self.edges[e].weights
 
-            print("self.edge_weights[e].grad_fn = ", self.edge_weights[e].grad_fn)
-
             # https://stackoverflow.com/a/45024500/8776167 extracts the weights learned through NN functions
             # self.f_weights[e] = list(self.edges[e].parameters())
 
@@ -237,8 +235,7 @@ class Cell(nn.Module):
             # 'add' then 'concat' feature maps from different nodes
             # needs to take care of tensor dimension mismatch
             # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
-            with torch.no_grad():
-                self.output += self.nodes[n].output
+            self.output = self.output + self.nodes[n].output
 
 
 # to manage all nodes
@@ -255,43 +252,6 @@ class Graph(nn.Module):
                 stride = NORMAL_STRIDE  # normal cell
 
         self.cells = nn.ModuleList([Cell(stride) for i in range(NUM_OF_CELLS)])
-
-        # https://www.reddit.com/r/learnpython/comments/no7btk/how_to_carry_extra_information_across_dag/
-        # https://docs.python.org/3/tutorial/datastructures.html
-
-        # generates a supernet consisting of 'NUM_OF_CELLS' cells
-        # each cell contains of 'NUM_OF_NODES_IN_EACH_CELL' nodes
-        # refer to PNASNet https://arxiv.org/pdf/1712.00559.pdf#page=5 for the cell arrangement
-        # https://pytorch.org/tutorials/beginner/examples_autograd/two_layer_net_custom_function.html
-
-        # encodes the cells and nodes arrangement in the multigraph
-        for c in range(NUM_OF_CELLS):
-            if c > 1:  # for previous_previous_cell, (c-2)
-                self.cells[c].previous_cell = self.cells[c-1].output
-                self.cells[c].previous_previous_cell = self.cells[c-PREVIOUS_PREVIOUS].output
-
-            for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
-                    for m in range(NUM_OF_MIXED_OPS):
-                        # with torch.no_grad():
-                        if n > 0:
-                            # depends on PREVIOUS node's Type 1 connection
-                            # needs to take care tensor dimension mismatch from multiple edges connections
-                            self.cells[c].nodes[n].output = self.cells[c].nodes[n].output + \
-                                self.cells[c].nodes[n-1].connections[cc].edge_weights[m]
-
-                        else:  # n == 0
-                            if c > 1:  # there is no input from previous cells for the first two cells
-                                # needs to take care tensor dimension mismatch from multiple edges connections
-                                self.cells[c].nodes[n].output = self.cells[c].nodes[n].output + \
-                                    self.cells[c].nodes[n-1].connections[cc].edge_weights[m] + \
-                                    self.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edge_weights[m] + \
-                                    self.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edge_weights[m]
-
-                            else:
-                                self.cells[c].nodes[n].output = self.cells[c].nodes[n].connections[cc].edge_weights[m]
-
-                        print("self.cells[", c, "].nodes[", n, "].output.grad_fn = ", self.cells[c].nodes[n].output.grad_fn)
 
 
 # https://translate.google.com/translate?sl=auto&tl=en&u=http://khanrc.github.io/nas-4-darts-tutorial.html
@@ -347,7 +307,53 @@ def train_NN(forward_pass_only):
 
                         # combines all the feature maps from different mixed ops edges
                         graph.cells[c].nodes[n].connections[cc].combined_feature_map += \
-                            graph.cells[c].nodes[n].connections[cc].edges[e].forward_edge(x)  # Ltrain(w±, alpha)
+                            graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Ltrain(w±, alpha)
+
+                        print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edge_weights[", e, "].grad_fn = ",
+                              graph.cells[c].nodes[n].connections[cc].edge_weights[e].grad_fn)
+
+                        print("graph.cells[", c, "].output.grad_fn = ",
+                              graph.cells[c].output.grad_fn)
+
+    # https://www.reddit.com/r/learnpython/comments/no7btk/how_to_carry_extra_information_across_dag/
+    # https://docs.python.org/3/tutorial/datastructures.html
+
+    # generates a supernet consisting of 'NUM_OF_CELLS' cells
+    # each cell contains of 'NUM_OF_NODES_IN_EACH_CELL' nodes
+    # refer to PNASNet https://arxiv.org/pdf/1712.00559.pdf#page=5 for the cell arrangement
+    # https://pytorch.org/tutorials/beginner/examples_autograd/two_layer_net_custom_function.html
+
+    # encodes the cells and nodes arrangement in the multigraph
+    for c in range(NUM_OF_CELLS):
+        if c > 1:  # for previous_previous_cell, (c-2)
+            graph.cells[c].previous_cell = graph.cells[c-1].output
+            graph.cells[c].previous_previous_cell = graph.cells[c-PREVIOUS_PREVIOUS].output
+
+        for n in range(NUM_OF_NODES_IN_EACH_CELL):
+            for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+                if n > 0:
+                    # depends on PREVIOUS node's Type 1 connection
+                    # needs to take care tensor dimension mismatch from multiple edges connections
+                    graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].output + \
+                        graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
+
+                else:  # n == 0
+                    if c > 1:  # there is no input from previous cells for the first two cells
+                        # needs to take care tensor dimension mismatch from multiple edges connections
+                        graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].output + \
+                            graph.cells[c].nodes[n-1].connections[cc].combined_feature_map + \
+                            graph.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map + \
+                            graph.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map
+
+                    else:
+                        graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].connections[cc].combined_feature_map
+
+        for c in range(NUM_OF_CELLS):
+            for n in range(NUM_OF_NODES_IN_EACH_CELL):
+                # 'add' then 'concat' feature maps from different nodes
+                # needs to take care of tensor dimension mismatch
+                # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
+                graph.cells[c].output = graph.cells[c].output + graph.cells[c].nodes[n].output
 
         outputs1 = graph.cells[NUM_OF_CELLS-1].output
 
@@ -360,6 +366,13 @@ def train_NN(forward_pass_only):
             # backward pass
             Ltrain = Ltrain.requires_grad_()
             Ltrain.backward()
+
+            for c in range(NUM_OF_CELLS):
+                for n in range(NUM_OF_NODES_IN_EACH_CELL):
+                    for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+                        for e in range(NUM_OF_MIXED_OPS):
+                            print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad = ",
+                                  graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad)
 
             for name, param in graph.named_parameters():
                 print(name, param.grad)
@@ -442,8 +455,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
 
                         # need to take care of tensors dimension mismatch
                         graph.cells[c].nodes[n].connections[cc].combined_feature_map += \
-                            graph.cells[c].nodes[n].connections[cc].edge_weights[e] * \
-                            graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Lval(w*, alpha)
+                            graph.cells[c].nodes[n].connections[cc].edges[e].forward_edge(x)  # Lval(w*, alpha)
 
         outputs2 = graph.cells[NUM_OF_CELLS-1].output
 
