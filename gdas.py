@@ -334,6 +334,12 @@ def train_NN(forward_pass_only):
                 if n > 0:
                     # depends on PREVIOUS node's Type 1 connection
                     # needs to take care tensor dimension mismatch from multiple edges connections
+                    print("graph.cells[", c ,"].nodes[" ,n, "].output.size() = ",
+                          graph.cells[c].nodes[n].output.size())
+
+                    print("graph.cells[", c, "].nodes[", n-1, "].connections[", cc, "].combined_feature_map.size() = ",
+                          graph.cells[c].nodes[n-1].connections[cc].combined_feature_map.size())
+
                     graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].output + \
                         graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
 
