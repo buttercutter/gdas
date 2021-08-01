@@ -207,7 +207,11 @@ class Node(nn.Module):
 
         # Type 2
         # depends on PREVIOUS node's Type 1 output
-        self.output = torch.zeros(NUM_OF_IMAGE_CLASSES, requires_grad=True)  # for initialization
+        self.output = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
+                                                requires_grad=True)  # for initialization
+
+        if USE_CUDA:
+            self.output = self.output.cuda()
 
 
 # to manage all nodes within a cell
@@ -229,7 +233,11 @@ class Cell(nn.Module):
         # just for variables initialization
         self.previous_cell = 0
         self.previous_previous_cell = 0
-        self.output = torch.zeros(NUM_OF_NODES_IN_EACH_CELL, NUM_OF_IMAGE_CLASSES, requires_grad=True)
+        self.output = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
+                                                requires_grad=True)
+
+        if USE_CUDA:
+            self.output = self.output.cuda()
 
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # 'add' then 'concat' feature maps from different nodes
@@ -365,6 +373,9 @@ def train_NN(forward_pass_only):
 
         if USE_CUDA:
             outputs1 = outputs1.cuda()
+
+        print("outputs1.size() = ", outputs1.size())
+        print("train_labels.size() = ", train_labels.size())
 
         Ltrain = criterion(outputs1, train_labels)
 
