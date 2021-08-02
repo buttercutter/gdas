@@ -376,7 +376,12 @@ def train_NN(forward_pass_only):
         if USE_CUDA:
             output_tensor = output_tensor.cuda()
 
-        m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
+        if USE_CUDA:
+            m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES).cuda()
+
+        else:
+            m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
+
         outputs1 = m_linear(output_tensor)
 
         if USE_CUDA:
