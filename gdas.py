@@ -272,6 +272,7 @@ def train_NN(forward_pass_only):
         graph = graph.cuda()
 
     criterion = nn.CrossEntropyLoss()
+    # criterion = nn.BCELoss()
     optimizer1 = optim.SGD(graph.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
 
     # just for initialization, no special meaning
@@ -369,7 +370,14 @@ def train_NN(forward_pass_only):
                 # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
                 graph.cells[c].output = graph.cells[c].output + graph.cells[c].nodes[n].output
 
-        outputs1 = graph.cells[NUM_OF_CELLS-1].output
+        output_tensor = graph.cells[NUM_OF_CELLS-1].output
+        output_tensor = output_tensor.view(output_tensor.shape[0], -1)
+
+        if USE_CUDA:
+            output_tensor = output_tensor.cuda()
+
+        m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
+        outputs1 = m_linear(output_tensor)
 
         if USE_CUDA:
             outputs1 = outputs1.cuda()
