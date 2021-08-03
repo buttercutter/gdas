@@ -339,6 +339,12 @@ def train_NN(forward_pass_only):
             graph.cells[c].previous_previous_cell = graph.cells[c-PREVIOUS_PREVIOUS].output
 
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
+
+            # 'add' then 'concat' feature maps from different nodes
+            # needs to take care of tensor dimension mismatch
+            # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
+            graph.cells[c].output = graph.cells[c].output + graph.cells[c].nodes[n].output
+
             for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
                 if n > 0:
                     # depends on PREVIOUS node's Type 1 connection
@@ -362,13 +368,6 @@ def train_NN(forward_pass_only):
 
                     else:
                         graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].connections[cc].combined_feature_map
-
-        for c in range(NUM_OF_CELLS):
-            for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                # 'add' then 'concat' feature maps from different nodes
-                # needs to take care of tensor dimension mismatch
-                # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
-                graph.cells[c].output = graph.cells[c].output + graph.cells[c].nodes[n].output
 
         output_tensor = graph.cells[NUM_OF_CELLS-1].output
         output_tensor = output_tensor.view(output_tensor.shape[0], -1)
@@ -401,8 +400,8 @@ def train_NN(forward_pass_only):
                 for n in range(NUM_OF_NODES_IN_EACH_CELL):
                     for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
                         for e in range(NUM_OF_MIXED_OPS):
-                            print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad = ",
-                                  graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad)
+                            print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad_fn = ",
+                                  graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad_fn)
 
             for name, param in graph.named_parameters():
                 print(name, param.grad)
