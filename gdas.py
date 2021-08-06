@@ -10,6 +10,7 @@ import torchvision
 import torchvision.transforms as transforms
 
 # import numpy as np
+torch.autograd.set_detect_anomaly(True)
 
 USE_CUDA = torch.cuda.is_available()
 
@@ -301,10 +302,6 @@ def train_NN(forward_pass_only):
     for epoch in range(NUM_EPOCHS):
         # forward pass
         for c in range(NUM_OF_CELLS):
-            if c > 1:  # for previous_previous_cell, (c-2)
-                graph.cells[c].previous_cell = graph.cells[c - 1].output
-                graph.cells[c].previous_previous_cell = graph.cells[c - PREVIOUS_PREVIOUS].output
-
             for n in range(NUM_OF_NODES_IN_EACH_CELL):
                 for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
                     for e in range(NUM_OF_MIXED_OPS):
@@ -319,7 +316,8 @@ def train_NN(forward_pass_only):
                             x = x.cuda()
 
                         # combines all the feature maps from different mixed ops edges
-                        graph.cells[c].nodes[n].connections[cc].combined_feature_map += \
+                        graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
+                            graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
                             graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Ltrain(w±, alpha)
 
                         print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edge_weights[", e, "].grad_fn = ",
@@ -328,87 +326,91 @@ def train_NN(forward_pass_only):
                         print("graph.cells[", c, "].output.grad_fn = ",
                               graph.cells[c].output.grad_fn)
 
-                # https://www.reddit.com/r/learnpython/comments/no7btk/how_to_carry_extra_information_across_dag/
-                # https://docs.python.org/3/tutorial/datastructures.html
+                        # https://www.reddit.com/r/learnpython/comments/no7btk/how_to_carry_extra_information_across_dag/
+                        # https://docs.python.org/3/tutorial/datastructures.html
 
-                # generates a supernet consisting of 'NUM_OF_CELLS' cells
-                # each cell contains of 'NUM_OF_NODES_IN_EACH_CELL' nodes
-                # refer to PNASNet https://arxiv.org/pdf/1712.00559.pdf#page=5 for the cell arrangement
-                # https://pytorch.org/tutorials/beginner/examples_autograd/two_layer_net_custom_function.html
+                        # generates a supernet consisting of 'NUM_OF_CELLS' cells
+                        # each cell contains of 'NUM_OF_NODES_IN_EACH_CELL' nodes
+                        # refer to PNASNet https://arxiv.org/pdf/1712.00559.pdf#page=5 for the cell arrangement
+                        # https://pytorch.org/tutorials/beginner/examples_autograd/two_layer_net_custom_function.html
 
-                # encodes the cells and nodes arrangement in the multigraph
+                        # encodes the cells and nodes arrangement in the multigraph
 
-                # 'add' then 'concat' feature maps from different nodes
-                # needs to take care of tensor dimension mismatch
-                # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
-                graph.cells[c].output = graph.cells[c].output + graph.cells[c].nodes[n].output
+                        # 'add' then 'concat' feature maps from different nodes
+                        # needs to take care of tensor dimension mismatch
+                        # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
+                        graph.cells[c].output += graph.cells[c].nodes[n].output
 
-                for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
-                    if n > 0:
-                        # depends on PREVIOUS node's Type 1 connection
-                        # needs to take care tensor dimension mismatch from multiple edges connections
-                        print("graph.cells[", c ,"].nodes[" ,n, "].output.size() = ",
-                              graph.cells[c].nodes[n].output.size())
+                        if c > 1:  # for previous_previous_cell, (c-2)
+                            graph.cells[c].previous_cell = graph.cells[c - 1].output
+                            graph.cells[c].previous_previous_cell = graph.cells[c - PREVIOUS_PREVIOUS].output
 
-                        print("graph.cells[", c, "].nodes[", n-1, "].connections[", cc, "].combined_feature_map.size() = ",
-                              graph.cells[c].nodes[n-1].connections[cc].combined_feature_map.size())
-
-                        graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].output + \
-                            graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
-
-                    else:  # n == 0
-                        if c > 1:  # there is no input from previous cells for the first two cells
+                        if n > 0:
+                            # depends on PREVIOUS node's Type 1 connection
                             # needs to take care tensor dimension mismatch from multiple edges connections
-                            graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].output + \
-                                graph.cells[c].nodes[n-1].connections[cc].combined_feature_map + \
-                                graph.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map + \
-                                graph.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map
+                            print("graph.cells[", c ,"].nodes[" ,n, "].output.size() = ",
+                                  graph.cells[c].nodes[n].output.size())
 
-                        else:
-                            graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].connections[cc].combined_feature_map
+                            print("graph.cells[", c, "].nodes[", n-1, "].connections[", cc, "].combined_feature_map.size() = ",
+                                  graph.cells[c].nodes[n-1].connections[cc].combined_feature_map.size())
 
-            output_tensor = graph.cells[NUM_OF_CELLS-1].output
-            output_tensor = output_tensor.view(output_tensor.shape[0], -1)
+                            graph.cells[c].nodes[n].output += \
+                                graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
 
-            if USE_CUDA:
-                output_tensor = output_tensor.cuda()
+                        else:  # n == 0
+                            if c > 1:  # there is no input from previous cells for the first two cells
+                                # needs to take care tensor dimension mismatch from multiple edges connections
+                                graph.cells[c].nodes[n].output += \
+                                    graph.cells[c].nodes[n-1].connections[cc].combined_feature_map + \
+                                    graph.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map + \
+                                    graph.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map
 
-            if USE_CUDA:
-                m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES).cuda()
+                            else:
+                                graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].connections[cc].combined_feature_map
 
-            else:
-                m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
+        output_tensor = graph.cells[NUM_OF_CELLS-1].output
+        output_tensor = output_tensor.view(output_tensor.shape[0], -1)
 
-            outputs1 = m_linear(output_tensor)
+        if USE_CUDA:
+            output_tensor = output_tensor.cuda()
 
-            if USE_CUDA:
-                outputs1 = outputs1.cuda()
+        if USE_CUDA:
+            m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES).cuda()
 
-            print("outputs1.size() = ", outputs1.size())
-            print("train_labels.size() = ", train_labels.size())
+        else:
+            m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
 
-            Ltrain = criterion(outputs1, train_labels)
+        outputs1 = m_linear(output_tensor)
 
-            if forward_pass_only == 0:
-                # backward pass
-                Ltrain = Ltrain.requires_grad_()
-                Ltrain.backward()
+        if USE_CUDA:
+            outputs1 = outputs1.cuda()
 
-                for c in range(NUM_OF_CELLS):
-                    for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                        for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
-                            for e in range(NUM_OF_MIXED_OPS):
+        print("outputs1.size() = ", outputs1.size())
+        print("train_labels.size() = ", train_labels.size())
+
+        Ltrain = criterion(outputs1, train_labels)
+
+        if forward_pass_only == 0:
+            # backward pass
+            Ltrain = Ltrain.requires_grad_()
+            Ltrain.backward()
+
+            for c in range(NUM_OF_CELLS):
+                for n in range(NUM_OF_NODES_IN_EACH_CELL):
+                    for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+                        for e in range(NUM_OF_MIXED_OPS):
+                            if c > 4:
                                 print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad_fn = ",
-                                      graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad_fn)
+                                  graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad_fn)
 
-                for name, param in graph.named_parameters():
-                    print(name, param.grad)
+            for name, param in graph.named_parameters():
+                print(name, param.grad)
 
-                optimizer1.step()
+            optimizer1.step()
 
-            else:
-                # no need to save model parameters for next epoch
-                return Ltrain
+        else:
+            # no need to save model parameters for next epoch
+            return Ltrain
 
         # DARTS's approximate architecture gradient. Refer to equation (8)
         # needs to save intermediate trained model for Ltrain
