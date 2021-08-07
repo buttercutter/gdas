@@ -30,7 +30,7 @@ NUM_OF_CELLS = 8
 NUM_OF_MIXED_OPS = 4
 NUM_OF_PREVIOUS_CELLS_OUTPUTS = 2  # last_cell_output , second_last_cell_output
 NUM_OF_NODES_IN_EACH_CELL = 4
-NUM_OF_CONNECTIONS_PER_CELL = NUM_OF_PREVIOUS_CELLS_OUTPUTS + NUM_OF_NODES_IN_EACH_CELL
+NUM_OF_CONNECTIONS_PER_NODE = NUM_OF_PREVIOUS_CELLS_OUTPUTS + NUM_OF_NODES_IN_EACH_CELL
 NUM_OF_CHANNELS = 16
 INTERVAL_BETWEEN_REDUCTION_CELLS = 3
 PREVIOUS_PREVIOUS = 2  # (n-2)
@@ -204,7 +204,7 @@ class Node(nn.Module):
         # Type 2: (single edge) output connects directly to the final output node
 
         # Type 1
-        self.connections = nn.ModuleList([Connection(stride) for i in range(NUM_OF_CONNECTIONS_PER_CELL)])
+        self.connections = nn.ModuleList([Connection(stride) for i in range(NUM_OF_CONNECTIONS_PER_NODE)])
 
         # Type 2
         # depends on PREVIOUS node's Type 1 output
@@ -303,7 +303,7 @@ def train_NN(forward_pass_only):
         # forward pass
         for c in range(NUM_OF_CELLS):
             for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+                for cc in range(NUM_OF_CONNECTIONS_PER_NODE):
                     for e in range(NUM_OF_MIXED_OPS):
                         if c == 0:
                             x = train_inputs
@@ -397,7 +397,7 @@ def train_NN(forward_pass_only):
 
             for c in range(NUM_OF_CELLS):
                 for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                    for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+                    for cc in range(NUM_OF_CONNECTIONS_PER_NODE):
                         for e in range(NUM_OF_MIXED_OPS):
                             if c > 4:
                                 print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad_fn = ",
@@ -467,7 +467,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
         # into an output feature map to be fed into the next neighbour node for further processing
         for c in range(NUM_OF_CELLS):
             for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+                for cc in range(NUM_OF_CONNECTIONS_PER_NODE):
                     for e in range(NUM_OF_MIXED_OPS):
                         x = 0  # depends on the input tensor dimension requirement
 
@@ -522,7 +522,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
 
     for c in range(NUM_OF_CELLS):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
-            for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+            for cc in range(NUM_OF_CONNECTIONS_PER_NODE):
                 CC = graph.cells[c].nodes[n].connections[cc]
 
                 for e in range(NUM_OF_MIXED_OPS):
@@ -538,7 +538,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     # replaces f_weights with weight_plus before NN training
     for c in range(NUM_OF_CELLS):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
-            for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+            for cc in range(NUM_OF_CONNECTIONS_PER_NODE):
                 CC = graph.cells[c].nodes[n].connections[cc]
 
                 for e in range(NUM_OF_MIXED_OPS):
@@ -551,7 +551,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     # replaces f_weights with weight_minus before NN training
     for c in range(NUM_OF_CELLS):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
-            for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+            for cc in range(NUM_OF_CONNECTIONS_PER_NODE):
                 CC = graph.cells[c].nodes[n].connections[cc]
 
                 for e in range(NUM_OF_MIXED_OPS):
@@ -564,7 +564,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     # Restores original f_weights
     for c in range(NUM_OF_CELLS):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
-            for cc in range(NUM_OF_CONNECTIONS_PER_CELL):
+            for cc in range(NUM_OF_CONNECTIONS_PER_NODE):
                 CC = graph.cells[c].nodes[n].connections[cc]
 
                 for e in range(NUM_OF_MIXED_OPS):
