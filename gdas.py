@@ -303,7 +303,7 @@ def train_NN(forward_pass_only):
         # forward pass
         for c in range(NUM_OF_CELLS):
             for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                for cc in range(NUM_OF_CONNECTIONS_PER_NODE):
+                for cc in range(NUM_OF_CONNECTIONS_PER_NODE - n):  # not all nodes have same number of output connection
                     for e in range(NUM_OF_MIXED_OPS):
                         if c == 0:
                             x = train_inputs
@@ -399,8 +399,7 @@ def train_NN(forward_pass_only):
                 for n in range(NUM_OF_NODES_IN_EACH_CELL):
                     for cc in range(NUM_OF_CONNECTIONS_PER_NODE):
                         for e in range(NUM_OF_MIXED_OPS):
-                            if c > 4:
-                                print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad_fn = ",
+                            print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad_fn = ",
                                   graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad_fn)
 
             for name, param in graph.named_parameters():
