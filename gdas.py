@@ -303,7 +303,8 @@ def train_NN(forward_pass_only):
         # forward pass
         for c in range(NUM_OF_CELLS):
             for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                for cc in range(NUM_OF_CONNECTIONS_PER_NODE - n):  # not all nodes have same number of output connection
+                # not all nodes have same number of input connection
+                for cc in range(NUM_OF_CONNECTIONS_PER_NODE - (NUM_OF_NODES_IN_EACH_CELL - n)):
                     for e in range(NUM_OF_MIXED_OPS):
                         if c == 0:
                             x = train_inputs
@@ -336,11 +337,6 @@ def train_NN(forward_pass_only):
 
                         # encodes the cells and nodes arrangement in the multigraph
 
-                        # 'add' then 'concat' feature maps from different nodes
-                        # needs to take care of tensor dimension mismatch
-                        # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
-                        graph.cells[c].output += graph.cells[c].nodes[n].output
-
                         if c > 1:  # for previous_previous_cell, (c-2)
                             graph.cells[c].previous_cell = graph.cells[c - 1].output
                             graph.cells[c].previous_previous_cell = graph.cells[c - PREVIOUS_PREVIOUS].output
@@ -367,6 +363,11 @@ def train_NN(forward_pass_only):
 
                             else:
                                 graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].connections[cc].combined_feature_map
+
+                        # 'add' then 'concat' feature maps from different nodes
+                        # needs to take care of tensor dimension mismatch
+                        # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
+                        graph.cells[c].output += graph.cells[c].nodes[n].output
 
         output_tensor = graph.cells[NUM_OF_CELLS-1].output
         output_tensor = output_tensor.view(output_tensor.shape[0], -1)
@@ -397,7 +398,8 @@ def train_NN(forward_pass_only):
 
             for c in range(NUM_OF_CELLS):
                 for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                    for cc in range(NUM_OF_CONNECTIONS_PER_NODE):
+                    # not all nodes have same number of input connection
+                    for cc in range(NUM_OF_CONNECTIONS_PER_NODE - (NUM_OF_NODES_IN_EACH_CELL - n)):
                         for e in range(NUM_OF_MIXED_OPS):
                             print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad_fn = ",
                                   graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad_fn)
