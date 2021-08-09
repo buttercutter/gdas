@@ -351,13 +351,14 @@ def train_NN(forward_pass_only):
                                   graph.cells[c].nodes[n-1].connections[cc].combined_feature_map.size())
 
                             graph.cells[c].nodes[n].output += \
-                                graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
+                                graph.cells[c].nodes[n-1].connections[cc].combined_feature_map + \
+                                graph.cells[c - 1].nodes[NUM_OF_NODES_IN_EACH_CELL - 1].connections[cc].combined_feature_map + \
+                                graph.cells[c - PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL - 1].connections[cc].combined_feature_map
 
                         else:  # n == 0
                             if c > 1:  # there is no input from previous cells for the first two cells
                                 # needs to take care tensor dimension mismatch from multiple edges connections
                                 graph.cells[c].nodes[n].output += \
-                                    graph.cells[c].nodes[n-1].connections[cc].combined_feature_map + \
                                     graph.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map + \
                                     graph.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map
 
