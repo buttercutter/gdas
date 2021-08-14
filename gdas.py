@@ -162,12 +162,14 @@ class Connection(nn.Module):
             self.avgpool_edge = AvgPoolEdge(stride)
             self.skip_edge = SkipEdge()
 
-        self.edges = [self.conv2d_edge, self.maxpool_edge, self.avgpool_edge, self.skip_edge]
+        # self.edges = [self.conv2d_edge, self.maxpool_edge, self.avgpool_edge, self.skip_edge]
+        # python list will break the computation graph, need to use nn.ModuleList as a differentiable python list
+        self.edges = nn.ModuleList([self.conv2d_edge, self.maxpool_edge, self.avgpool_edge, self.skip_edge])
         self.edge_weights = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
 
         # for approximate architecture gradient
-        self.f_weights = [None] * NUM_OF_MIXED_OPS
-        self.f_weights_backup = [None] * NUM_OF_MIXED_OPS
+        self.f_weights = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
+        self.f_weights_backup = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
         self.weight_plus = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
         self.weight_minus = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
 
@@ -365,10 +367,16 @@ def train_NN(forward_pass_only):
                             else:
                                 graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].connections[cc].combined_feature_map
 
+                        print("graph.cells[", c, "].nodes[", n, "].output.grad_fn = ",
+                              graph.cells[c].nodes[n].output.grad_fn)
+
                         # 'add' then 'concat' feature maps from different nodes
                         # needs to take care of tensor dimension mismatch
                         # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
                         graph.cells[c].output += graph.cells[c].nodes[n].output
+
+                        print("graph.cells[", c, "].output.grad_fn = ",
+                              graph.cells[c].output.grad_fn)
 
         output_tensor = graph.cells[NUM_OF_CELLS-1].output
         output_tensor = output_tensor.view(output_tensor.shape[0], -1)
@@ -402,6 +410,12 @@ def train_NN(forward_pass_only):
                     # not all nodes have same number of Type-1 output connection
                     for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n):
                         for e in range(NUM_OF_MIXED_OPS):
+                            print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].f_weights.grad_fn = ",
+                                  graph.cells[c].nodes[n].connections[cc].f_weights.grad_fn)
+
+                            print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].grad_fn = ",
+                                  graph.cells[c].nodes[n].connections[cc].edges[e].grad_fn)
+
                             print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad_fn = ",
                                   graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad_fn)
 
@@ -489,10 +503,26 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                         graph.cells[c].nodes[n].connections[cc].combined_feature_map += \
                             graph.cells[c].nodes[n].connections[cc].edges[e].forward_edge(x)  # Lval(w*, alpha)
 
-        outputs2 = graph.cells[NUM_OF_CELLS-1].output
+        output2_tensor = graph.cells[NUM_OF_CELLS-1].output
+        output2_tensor = output2_tensor.view(output2_tensor.shape[0], -1)
+
+        if USE_CUDA:
+            output2_tensor = output2_tensor.cuda()
+
+        if USE_CUDA:
+            m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES).cuda()
+
+        else:
+            m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
+
+        outputs2 = m_linear(output2_tensor)
 
         if USE_CUDA:
             outputs2 = outputs2.cuda()
+
+        print("outputs2.size() = ", outputs2.size())
+        print("val_labels.size() = ", val_labels.size())
+        print("train_labels.size() = ", train_labels.size())
 
         if train_or_val == 'val':
             loss = criterion(outputs2, val_labels)
