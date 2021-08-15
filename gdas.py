@@ -413,9 +413,6 @@ def train_NN(forward_pass_only):
                             print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].f_weights.grad_fn = ",
                                   graph.cells[c].nodes[n].connections[cc].f_weights.grad_fn)
 
-                            print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].grad_fn = ",
-                                  graph.cells[c].nodes[n].connections[cc].edges[e].grad_fn)
-
                             print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad_fn = ",
                                   graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad_fn)
 
