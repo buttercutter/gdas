@@ -343,7 +343,17 @@ def train_NN(forward_pass_only):
                             graph.cells[c].previous_cell = graph.cells[c - 1].output
                             graph.cells[c].previous_previous_cell = graph.cells[c - PREVIOUS_PREVIOUS].output
 
-                        if n > 0:
+                        if n == 0:
+                            if c <= 1:
+                                graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].connections[cc].combined_feature_map
+
+                            else:  # there is no input from previous cells for the first two cells
+                                # needs to take care tensor dimension mismatch from multiple edges connections
+                                graph.cells[c].nodes[n].output += \
+                                    graph.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map + \
+                                    graph.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map
+
+                        else:  # n > 0
                             # depends on PREVIOUS node's Type 1 connection
                             # needs to take care tensor dimension mismatch from multiple edges connections
                             print("graph.cells[", c ,"].nodes[" ,n, "].output.size() = ",
@@ -356,16 +366,6 @@ def train_NN(forward_pass_only):
                                 graph.cells[c].nodes[n-1].connections[cc].combined_feature_map + \
                                 graph.cells[c - 1].nodes[NUM_OF_NODES_IN_EACH_CELL - 1].connections[cc].combined_feature_map + \
                                 graph.cells[c - PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL - 1].connections[cc].combined_feature_map
-
-                        else:  # n == 0
-                            if c > 1:  # there is no input from previous cells for the first two cells
-                                # needs to take care tensor dimension mismatch from multiple edges connections
-                                graph.cells[c].nodes[n].output += \
-                                    graph.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map + \
-                                    graph.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map
-
-                            else:
-                                graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].connections[cc].combined_feature_map
 
                         print("graph.cells[", c, "].nodes[", n, "].output.grad_fn = ",
                               graph.cells[c].nodes[n].output.grad_fn)
