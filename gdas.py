@@ -312,8 +312,13 @@ def train_NN(forward_pass_only):
                             x = train_inputs
 
                         else:
-                            # Uses feature map output from previous neighbour node for further processing
-                            x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
+                            if n == 0:
+                                # Uses feature map output from previous neighbour cell for further processing
+                                x = graph.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map
+
+                            else:
+                                # Uses feature map output from previous neighbour node for further processing
+                                x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
 
                         if USE_CUDA:
                             x = x.cuda()
