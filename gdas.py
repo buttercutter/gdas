@@ -306,7 +306,7 @@ def train_NN(forward_pass_only):
         for c in range(NUM_OF_CELLS):
             for n in range(NUM_OF_NODES_IN_EACH_CELL):
                 # not all nodes have same number of Type-1 output connection
-                for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n):
+                for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
                     for e in range(NUM_OF_MIXED_OPS):
                         if c == 0:
                             x = train_inputs
@@ -413,7 +413,7 @@ def train_NN(forward_pass_only):
             for c in range(NUM_OF_CELLS):
                 for n in range(NUM_OF_NODES_IN_EACH_CELL):
                     # not all nodes have same number of Type-1 output connection
-                    for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n):
+                    for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
                         for e in range(NUM_OF_MIXED_OPS):
                             print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].f_weights.grad_fn = ",
                                   graph.cells[c].nodes[n].connections[cc].f_weights.grad_fn)
@@ -486,7 +486,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
         for c in range(NUM_OF_CELLS):
             for n in range(NUM_OF_NODES_IN_EACH_CELL):
                 # not all nodes have same number of Type-1 output connection
-                for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n):
+                for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
                     for e in range(NUM_OF_MIXED_OPS):
                         x = 0  # depends on the input tensor dimension requirement
 
@@ -558,7 +558,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     for c in range(NUM_OF_CELLS):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # not all nodes have same number of Type-1 output connection
-            for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n):
+            for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
                 CC = graph.cells[c].nodes[n].connections[cc]
 
                 for e in range(NUM_OF_MIXED_OPS):
@@ -575,7 +575,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     for c in range(NUM_OF_CELLS):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # not all nodes have same number of Type-1 output connection
-            for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n):
+            for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
                 CC = graph.cells[c].nodes[n].connections[cc]
 
                 for e in range(NUM_OF_MIXED_OPS):
@@ -589,7 +589,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     for c in range(NUM_OF_CELLS):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # not all nodes have same number of Type-1 output connection
-            for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n):
+            for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
                 CC = graph.cells[c].nodes[n].connections[cc]
 
                 for e in range(NUM_OF_MIXED_OPS):
@@ -603,7 +603,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     for c in range(NUM_OF_CELLS):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # not all nodes have same number of Type-1 output connection
-            for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n):
+            for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
                 CC = graph.cells[c].nodes[n].connections[cc]
 
                 for e in range(NUM_OF_MIXED_OPS):
