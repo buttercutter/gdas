@@ -265,6 +265,23 @@ class Graph(nn.Module):
         self.cells = nn.ModuleList([Cell(stride) for i in range(NUM_OF_CELLS)])
 
 
+total_grad_out = []
+total_grad_in = []
+
+def hook_fn_backward (module, grad_input, grad_output):
+    print (module) # for distinguishing module
+
+    # In order to comply with the order back-propagation, let's print grad_output
+    print ( 'grad_output', grad_output)
+
+    # Reprint grad_input
+    print ( 'grad_input', grad_input)
+
+    # Save to global variables
+    total_grad_in.append (grad_input)
+    total_grad_out.append (grad_output)
+
+
 # https://translate.google.com/translate?sl=auto&tl=en&u=http://khanrc.github.io/nas-4-darts-tutorial.html
 def train_NN(forward_pass_only):
     print("Entering train_NN(), forward_pass_only = ", forward_pass_only)
@@ -273,6 +290,12 @@ def train_NN(forward_pass_only):
 
     if USE_CUDA:
         graph = graph.cuda()
+
+    modules = graph.named_children()
+    print("modules = " , modules)
+
+    for name, module in graph.named_modules():
+        module.register_full_backward_hook(hook_fn_backward)
 
     criterion = nn.CrossEntropyLoss()
     # criterion = nn.BCELoss()
@@ -408,6 +431,10 @@ def train_NN(forward_pass_only):
         if forward_pass_only == 0:
             # backward pass
             Ltrain = Ltrain.requires_grad_()
+
+            Ltrain.retain_grad()
+            Ltrain.register_hook(lambda x: print(x))
+
             Ltrain.backward()
 
             for c in range(NUM_OF_CELLS):
