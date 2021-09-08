@@ -437,14 +437,14 @@ def train_NN(forward_pass_only):
 
             Ltrain.backward()
 
-            for c in range(NUM_OF_CELLS):
-                for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                    # not all nodes have same number of Type-1 output connection
-                    for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                        for e in range(NUM_OF_MIXED_OPS):
-                            if e == 0:  # graph.cells[c].nodes[n].connections[cc].edges[e] == conv2d_edge:
-                                print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad_fn = ",
-                                      graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad_fn)
+            # for c in range(NUM_OF_CELLS):
+            #     for n in range(NUM_OF_NODES_IN_EACH_CELL):
+            #         # not all nodes have same number of Type-1 output connection
+            #         for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
+            #             for e in range(NUM_OF_MIXED_OPS):
+            #                 if e == 0:  # graph.cells[c].nodes[n].connections[cc].edges[e] == conv2d_edge:
+            #                     print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad_fn = ",
+            #                           graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad_fn)
 
             for name, param in graph.named_parameters():
                 print(name, param.grad)
