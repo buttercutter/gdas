@@ -191,6 +191,7 @@ class Connection(nn.Module):
         # if one_hot is already there, would summation be required given that all other entries are forced to 0 ?
         # It's not required, but you don't know, which index is one hot encoded 1.
         # https://pytorch.org/docs/stable/nn.functional.html#gumbel-softmax
+        # See also https://github.com/D-X-Y/AutoDL-Projects/issues/10#issuecomment-916619163
 
         gumbel = F.gumbel_softmax(self.edge_weights, tau=TAU_GUMBEL, hard=True)
         self.chosen_edge = torch.argmax(gumbel, dim=0)  # converts one-hot encoding into integer
@@ -446,8 +447,12 @@ def train_NN(forward_pass_only):
             #                     print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad_fn = ",
             #                           graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad_fn)
 
+            print("starts to print graph.named_parameters()")
+
             for name, param in graph.named_parameters():
                 print(name, param.grad)
+
+            print("finished printing graph.named_parameters()")
 
             optimizer1.step()
 
