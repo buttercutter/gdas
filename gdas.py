@@ -335,6 +335,9 @@ def train_NN(forward_pass_only):
                         if c == 0:
                             x = train_inputs
 
+                            if USE_CUDA:
+                                x = x.cuda()
+
                         else:
                             if n == 0:
                                 # Uses feature map output from previous neighbour cell for further processing
@@ -344,13 +347,13 @@ def train_NN(forward_pass_only):
                                 # Uses feature map output from previous neighbour node for further processing
                                 x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
 
-                        if USE_CUDA:
-                            x = x.cuda()
-
                         # combines all the feature maps from different mixed ops edges
                         graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
                             graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
                             graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Ltrain(w±, alpha)
+
+                        print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].combined_feature_map.grad_fn = ",
+                              graph.cells[c].nodes[n].connections[cc].combined_feature_map.grad_fn)
 
                         print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edge_weights[", e, "].grad_fn = ",
                               graph.cells[c].nodes[n].connections[cc].edge_weights[e].grad_fn)
@@ -379,8 +382,7 @@ def train_NN(forward_pass_only):
                             else:  # there is no input from previous cells for the first two cells
                                 # needs to take care tensor dimension mismatch from multiple edges connections
                                 graph.cells[c].nodes[n].output += \
-                                    graph.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map + \
-                                    graph.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map
+                                    graph.cells[c-1].output + graph.cells[c-PREVIOUS_PREVIOUS].output
 
                         else:  # n > 0
                             # depends on PREVIOUS node's Type 1 connection
@@ -393,8 +395,8 @@ def train_NN(forward_pass_only):
 
                             graph.cells[c].nodes[n].output += \
                                 graph.cells[c].nodes[n-1].connections[cc].combined_feature_map + \
-                                graph.cells[c - 1].nodes[NUM_OF_NODES_IN_EACH_CELL - 1].connections[cc].combined_feature_map + \
-                                graph.cells[c - PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL - 1].connections[cc].combined_feature_map
+                                graph.cells[c - 1].output + \
+                                graph.cells[c - PREVIOUS_PREVIOUS].output
 
                         print("graph.cells[", c, "].nodes[", n, "].output.grad_fn = ",
                               graph.cells[c].nodes[n].output.grad_fn)
