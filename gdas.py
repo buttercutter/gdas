@@ -332,7 +332,7 @@ def train_NN(forward_pass_only):
                 # not all nodes have same number of Type-1 output connection
                 for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
                     for e in range(NUM_OF_MIXED_OPS):
-                        if c == 0:
+                        if c <= 1:
                             x = train_inputs
 
                             if USE_CUDA:
@@ -341,7 +341,7 @@ def train_NN(forward_pass_only):
                         else:
                             if n == 0:
                                 # Uses feature map output from previous neighbour cell for further processing
-                                x = graph.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].combined_feature_map
+                                x = graph.cells[c-1].output
 
                             else:
                                 # Uses feature map output from previous neighbour node for further processing
