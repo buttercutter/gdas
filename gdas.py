@@ -1,5 +1,7 @@
 # https://github.com/D-X-Y/AutoDL-Projects/issues/99
 
+VISUALIZER = 1
+
 import torch
 import torch.utils.data
 import torch.nn as nn
@@ -8,6 +10,10 @@ import torch.optim as optim
 
 import torchvision
 import torchvision.transforms as transforms
+
+if VISUALIZER:
+    # https://github.com/szagoruyko/pytorchviz
+    from torchviz import make_dot
 
 # import numpy as np
 torch.autograd.set_detect_anomaly(True)
@@ -426,6 +432,9 @@ def train_NN(forward_pass_only):
         if USE_CUDA:
             outputs1 = outputs1.cuda()
 
+        if VISUALIZER:
+            make_dot(outputs1.mean(), params=dict(graph.named_parameters())).render("gdas_torchviz", format="png")
+
         print("outputs1.size() = ", outputs1.size())
         print("train_labels.size() = ", train_labels.size())
 
@@ -658,6 +667,9 @@ if __name__ == "__main__":
 
         ltrain = train_NN(forward_pass_only=0)
         print("Finished train_NN()")
+
+        if VISUALIZER:
+            break # visualizer does not need more than a single run
 
         # 'train_or_val' to differentiate between using training dataset and validation dataset
         lval = train_architecture(forward_pass_only=0, train_or_val='val')
