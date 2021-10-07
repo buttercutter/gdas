@@ -289,6 +289,17 @@ def hook_fn_backward (module, grad_input, grad_output):
     total_grad_out.append (grad_output)
 
 
+# for tracking the gradient back-propagation operation
+def gradwalk(x, _depth=0):
+    if hasattr(x, 'grad'):
+        x = x.grad
+
+    if hasattr(x, 'next_functions'):
+        for fn in x.next_functions:
+            print(' ' * _depth + str(fn))
+            gradwalk(fn[0], _depth+1)
+
+
 # https://translate.google.com/translate?sl=auto&tl=en&u=http://khanrc.github.io/nas-4-darts-tutorial.html
 def train_NN(forward_pass_only):
     print("Entering train_NN(), forward_pass_only = ", forward_pass_only)
@@ -352,6 +363,8 @@ def train_NN(forward_pass_only):
                             else:
                                 # Uses feature map output from previous neighbour node for further processing
                                 x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
+
+                        print("x.grad_fn = ", x.grad_fn, " , c = ", c, " , n = ", n)
 
                         # combines all the feature maps from different mixed ops edges
                         graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
@@ -464,6 +477,12 @@ def train_NN(forward_pass_only):
                 print(name, param.grad)
 
             print("finished printing graph.named_parameters()")
+
+            print("starts gradwalk()")
+
+            gradwalk(Ltrain)
+
+            print("finished gradwalk()")
 
             optimizer1.step()
 
@@ -669,7 +688,7 @@ if __name__ == "__main__":
         print("Finished train_NN()")
 
         if VISUALIZER:
-            break # visualizer does not need more than a single run
+            break  # visualizer does not need more than a single run
 
         # 'train_or_val' to differentiate between using training dataset and validation dataset
         lval = train_architecture(forward_pass_only=0, train_or_val='val')
