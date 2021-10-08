@@ -1,6 +1,7 @@
 # https://github.com/D-X-Y/AutoDL-Projects/issues/99
 
 VISUALIZER = 1
+DEBUG = 1
 
 import torch
 import torch.utils.data
@@ -417,22 +418,37 @@ def train_NN(forward_pass_only):
                                 graph.cells[c - 1].output + \
                                 graph.cells[c - PREVIOUS_PREVIOUS].output
 
-                        print("graph.cells[", c, "].nodes[", n, "].output.grad_fn = ",
-                              graph.cells[c].nodes[n].output.grad_fn)
+                        if DEBUG:
+                            print("graph.cells[", c, "].nodes[", n, "].output.grad_fn = ",
+                                  graph.cells[c].nodes[n].output.grad_fn)
+
+                            graph.cells[c].nodes[n].output.retain_grad()
+                            print("gradwalk(graph.cells[", c, "].nodes[", n, "].output.grad_fn)")
+                            # gradwalk(graph.cells[c].nodes[n].output.grad_fn)
 
                         # 'add' then 'concat' feature maps from different nodes
                         # needs to take care of tensor dimension mismatch
                         # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
                         graph.cells[c].output += graph.cells[c].nodes[n].output
 
-                        print("graph.cells[", c, "].output.grad_fn = ",
-                              graph.cells[c].output.grad_fn)
+                        if DEBUG:
+                            print("graph.cells[", c, "].output.grad_fn = ",
+                                  graph.cells[c].output.grad_fn)
+    
+                            graph.cells[c].output.retain_grad()
+                            print("gradwalk(graph.cells[", c, "].output.grad_fn)")
+                            # gradwalk(graph.cells[c].output.grad_fn)
 
         output_tensor = graph.cells[NUM_OF_CELLS-1].output
         output_tensor = output_tensor.view(output_tensor.shape[0], -1)
 
         if USE_CUDA:
             output_tensor = output_tensor.cuda()
+
+        if DEBUG:
+            output_tensor.retain_grad()
+            print("gradwalk(output_tensor.grad_fn)")
+            # gradwalk(output_tensor.grad_fn)
 
         if USE_CUDA:
             m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES).cuda()
@@ -471,18 +487,19 @@ def train_NN(forward_pass_only):
             #                     print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edges[", e, "].f.weight.grad_fn = ",
             #                           graph.cells[c].nodes[n].connections[cc].edges[e].f.weight.grad_fn)
 
-            print("starts to print graph.named_parameters()")
-
-            for name, param in graph.named_parameters():
-                print(name, param.grad)
-
-            print("finished printing graph.named_parameters()")
-
-            print("starts gradwalk()")
-
-            gradwalk(Ltrain)
-
-            print("finished gradwalk()")
+            if DEBUG:
+                print("starts to print graph.named_parameters()")
+    
+                for name, param in graph.named_parameters():
+                    print(name, param.grad)
+    
+                print("finished printing graph.named_parameters()")
+    
+                print("starts gradwalk()")
+    
+                gradwalk(Ltrain.grad_fn)
+    
+                print("finished gradwalk()")
 
             optimizer1.step()
 
