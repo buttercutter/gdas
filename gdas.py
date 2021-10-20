@@ -303,18 +303,20 @@ def gradwalk(x, _depth=0):
 
 # https://translate.google.com/translate?sl=auto&tl=en&u=http://khanrc.github.io/nas-4-darts-tutorial.html
 def train_NN(forward_pass_only):
-    print("Entering train_NN(), forward_pass_only = ", forward_pass_only)
+    if DEBUG:
+        print("Entering train_NN(), forward_pass_only = ", forward_pass_only)
 
     graph = Graph()
 
     if USE_CUDA:
         graph = graph.cuda()
 
-    modules = graph.named_children()
-    print("modules = " , modules)
+    if DEBUG:
+        modules = graph.named_children()
+        print("modules = " , modules)
 
-    for name, module in graph.named_modules():
-        module.register_full_backward_hook(hook_fn_backward)
+        for name, module in graph.named_modules():
+            module.register_full_backward_hook(hook_fn_backward)
 
     criterion = nn.CrossEntropyLoss()
     # criterion = nn.BCELoss()
@@ -332,7 +334,8 @@ def train_NN(forward_pass_only):
         # zero the parameter gradients
         optimizer1.zero_grad()
 
-    print("before multiple for-loops")
+    if DEBUG:
+        print("before multiple for-loops")
 
     for train_data, val_data in (zip(trainloader, valloader)):
 
@@ -365,21 +368,23 @@ def train_NN(forward_pass_only):
                                 # Uses feature map output from previous neighbour node for further processing
                                 x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
 
-                        print("x.grad_fn = ", x.grad_fn, " , c = ", c, " , n = ", n)
+                        if DEBUG:
+                            print("x.grad_fn = ", x.grad_fn, " , c = ", c, " , n = ", n)
 
                         # combines all the feature maps from different mixed ops edges
                         graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
                             graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
                             graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Ltrain(w±, alpha)
 
-                        print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].combined_feature_map.grad_fn = ",
-                              graph.cells[c].nodes[n].connections[cc].combined_feature_map.grad_fn)
+                        if DEBUG:
+                            print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].combined_feature_map.grad_fn = ",
+                                  graph.cells[c].nodes[n].connections[cc].combined_feature_map.grad_fn)
 
-                        print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edge_weights[", e, "].grad_fn = ",
-                              graph.cells[c].nodes[n].connections[cc].edge_weights[e].grad_fn)
+                            print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edge_weights[", e, "].grad_fn = ",
+                                  graph.cells[c].nodes[n].connections[cc].edge_weights[e].grad_fn)
 
-                        print("graph.cells[", c, "].output.grad_fn = ",
-                              graph.cells[c].output.grad_fn)
+                            print("graph.cells[", c, "].output.grad_fn = ",
+                                  graph.cells[c].output.grad_fn)
 
                         # https://www.reddit.com/r/learnpython/comments/no7btk/how_to_carry_extra_information_across_dag/
                         # https://docs.python.org/3/tutorial/datastructures.html
@@ -407,11 +412,12 @@ def train_NN(forward_pass_only):
                         else:  # n > 0
                             # depends on PREVIOUS node's Type 1 connection
                             # needs to take care tensor dimension mismatch from multiple edges connections
-                            print("graph.cells[", c ,"].nodes[" ,n, "].output.size() = ",
-                                  graph.cells[c].nodes[n].output.size())
+                            if DEBUG:
+                                print("graph.cells[", c ,"].nodes[" ,n, "].output.size() = ",
+                                      graph.cells[c].nodes[n].output.size())
 
-                            print("graph.cells[", c, "].nodes[", n-1, "].connections[", cc, "].combined_feature_map.size() = ",
-                                  graph.cells[c].nodes[n-1].connections[cc].combined_feature_map.size())
+                                print("graph.cells[", c, "].nodes[", n-1, "].connections[", cc, "].combined_feature_map.size() = ",
+                                      graph.cells[c].nodes[n-1].connections[cc].combined_feature_map.size())
 
                             graph.cells[c].nodes[n].output += \
                                 graph.cells[c].nodes[n-1].connections[cc].combined_feature_map + \
@@ -434,7 +440,7 @@ def train_NN(forward_pass_only):
                         if DEBUG:
                             print("graph.cells[", c, "].output.grad_fn = ",
                                   graph.cells[c].output.grad_fn)
-    
+
                             graph.cells[c].output.retain_grad()
                             print("gradwalk(graph.cells[", c, "].output.grad_fn)")
                             # gradwalk(graph.cells[c].output.grad_fn)
@@ -464,17 +470,19 @@ def train_NN(forward_pass_only):
         if VISUALIZER:
             make_dot(outputs1.mean(), params=dict(graph.named_parameters())).render("gdas_torchviz", format="png")
 
-        print("outputs1.size() = ", outputs1.size())
-        print("train_labels.size() = ", train_labels.size())
+        if DEBUG:
+            print("outputs1.size() = ", outputs1.size())
+            print("train_labels.size() = ", train_labels.size())
 
         Ltrain = criterion(outputs1, train_labels)
 
         if forward_pass_only == 0:
             # backward pass
-            Ltrain = Ltrain.requires_grad_()
+            if DEBUG:
+                Ltrain = Ltrain.requires_grad_()
 
-            Ltrain.retain_grad()
-            Ltrain.register_hook(lambda x: print(x))
+                Ltrain.retain_grad()
+                Ltrain.register_hook(lambda x: print(x))
 
             Ltrain.backward()
 
@@ -489,16 +497,16 @@ def train_NN(forward_pass_only):
 
             if DEBUG:
                 print("starts to print graph.named_parameters()")
-    
+
                 for name, param in graph.named_parameters():
                     print(name, param.grad)
-    
+
                 print("finished printing graph.named_parameters()")
-    
+
                 print("starts gradwalk()")
-    
-                gradwalk(Ltrain.grad_fn)
-    
+
+                #gradwalk(Ltrain.grad_fn)
+
                 print("finished gradwalk()")
 
             optimizer1.step()
@@ -512,13 +520,15 @@ def train_NN(forward_pass_only):
         path = './model.pth'
         torch.save(graph, path)
 
-    print("after multiple for-loops")
+    if DEBUG:
+        print("after multiple for-loops")
 
     return Ltrain
 
 
 def train_architecture(forward_pass_only, train_or_val='val'):
-    print("Entering train_architecture(), forward_pass_only = ", forward_pass_only, " , train_or_val = ", train_or_val)
+    if DEBUG:
+        print("Entering train_architecture(), forward_pass_only = ", forward_pass_only, " , train_or_val = ", train_or_val)
 
     graph = Graph()
 
@@ -542,7 +552,8 @@ def train_architecture(forward_pass_only, train_or_val='val'):
         # zero the parameter gradients
         optimizer2.zero_grad()
 
-    print("before multiple for-loops")
+    if DEBUG:
+        print("before multiple for-loops")
 
     for train_data, val_data in (zip(trainloader, valloader)):
 
@@ -599,9 +610,10 @@ def train_architecture(forward_pass_only, train_or_val='val'):
         if USE_CUDA:
             outputs2 = outputs2.cuda()
 
-        print("outputs2.size() = ", outputs2.size())
-        print("val_labels.size() = ", val_labels.size())
-        print("train_labels.size() = ", train_labels.size())
+        if DEBUG:
+            print("outputs2.size() = ", outputs2.size())
+            print("val_labels.size() = ", val_labels.size())
+            print("train_labels.size() = ", train_labels.size())
 
         if train_or_val == 'val':
             loss = criterion(outputs2, val_labels)
@@ -687,7 +699,8 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                     for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
                         w = CC.f_weights_backup
 
-    print("after multiple for-loops")
+    if DEBUG:
+        print("after multiple for-loops")
 
     L2train_Lval = (Ltrain_plus - Ltrain_minus) / (2 * epsilon)
 
