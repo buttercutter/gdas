@@ -402,7 +402,7 @@ def train_NN(forward_pass_only):
 
                         if n == 0:
                             if c <= 1:
-                                graph.cells[c].nodes[n].output = graph.cells[c].nodes[n].connections[cc].combined_feature_map
+                                graph.cells[c].nodes[n].output += graph.cells[c].nodes[n].connections[cc].combined_feature_map
 
                             else:  # there is no input from previous cells for the first two cells
                                 # needs to take care tensor dimension mismatch from multiple edges connections
