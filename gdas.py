@@ -396,10 +396,6 @@ def train_NN(forward_pass_only):
 
                         # encodes the cells and nodes arrangement in the multigraph
 
-                        if c > 1:  # for previous_previous_cell, (c-2)
-                            graph.cells[c].previous_cell = graph.cells[c - 1].output
-                            graph.cells[c].previous_previous_cell = graph.cells[c - PREVIOUS_PREVIOUS].output
-
                         if n == 0:
                             if c <= 1:
                                 graph.cells[c].nodes[n].output += graph.cells[c].nodes[n].connections[cc].combined_feature_map
