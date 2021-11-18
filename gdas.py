@@ -359,22 +359,43 @@ def train_NN(forward_pass_only):
                             if USE_CUDA:
                                 x = x.cuda()
 
+                            # combines all the feature maps from different mixed ops edges
+                            graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
+                                graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
+                                graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Ltrain(w±, alpha)
+
                         else:
                             if n == 0:
-                                # Uses feature map output from previous neighbour cell for further processing
-                                x = graph.cells[c-1].output
+                                # Uses feature map output from previous neighbour cells for further processing
+                                x1 = graph.cells[c-1].output
+                                x2 = graph.cells[c-PREVIOUS_PREVIOUS].output
+
+                                # combines all the feature maps from different mixed ops edges
+                                graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
+                                    graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
+                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1) + \
+                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)  # Ltrain(w±, alpha)
 
                             else:
-                                # Uses feature map output from previous neighbour node for further processing
-                                x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
+                                # Uses feature map output from previous neighbour nodes for further processing
+                                for ni in range(n):  # previous nodes only
+                                    # connections[ni] for neighbour nodes only
+                                    x = graph.cells[c].nodes[ni].connections[ni].combined_feature_map
 
-                        if DEBUG:
-                            print("x.grad_fn = ", x.grad_fn, " , c = ", c, " , n = ", n)
+                                    # combines all the feature maps from different mixed ops edges
+                                    graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
+                                        graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
+                                        graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)
 
-                        # combines all the feature maps from different mixed ops edges
-                        graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                            graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
-                            graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Ltrain(w±, alpha)
+                                # Uses feature map output from previous neighbour cells for further processing
+                                x1 = graph.cells[c - 1].output
+                                x2 = graph.cells[c - PREVIOUS_PREVIOUS].output
+
+                                # combines all the feature maps from different mixed ops edges
+                                graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
+                                    graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
+                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1) + \
+                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)  # Ltrain(w±, alpha)
 
                         if DEBUG:
                             print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].combined_feature_map.grad_fn = ",
