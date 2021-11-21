@@ -346,6 +346,16 @@ def train_NN(forward_pass_only):
             train_inputs = train_inputs.cuda()
             train_labels = train_labels.cuda()
 
+    # https://www.reddit.com/r/learnpython/comments/no7btk/how_to_carry_extra_information_across_dag/
+    # https://docs.python.org/3/tutorial/datastructures.html
+
+    # generates a supernet consisting of 'NUM_OF_CELLS' cells
+    # each cell contains of 'NUM_OF_NODES_IN_EACH_CELL' nodes
+    # refer to PNASNet https://arxiv.org/pdf/1712.00559.pdf#page=5 for the cell arrangement
+    # https://pytorch.org/tutorials/beginner/examples_autograd/two_layer_net_custom_function.html
+
+    # encodes the cells and nodes arrangement in the multigraph
+
     for epoch in range(NUM_EPOCHS):
         # forward pass
         for c in range(NUM_OF_CELLS):
@@ -364,6 +374,9 @@ def train_NN(forward_pass_only):
                                 graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
                                 graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Ltrain(w±, alpha)
 
+                            graph.cells[c].nodes[n].output += \
+                                graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Ltrain(w±, alpha)
+
                         else:
                             if n == 0:
                                 # Uses feature map output from previous neighbour cells for further processing
@@ -373,6 +386,10 @@ def train_NN(forward_pass_only):
                                 # combines all the feature maps from different mixed ops edges
                                 graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
                                     graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
+                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1) + \
+                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)  # Ltrain(w±, alpha)
+
+                                graph.cells[c].nodes[n].output += \
                                     graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1) + \
                                     graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)  # Ltrain(w±, alpha)
 
@@ -397,6 +414,10 @@ def train_NN(forward_pass_only):
                                     graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1) + \
                                     graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)  # Ltrain(w±, alpha)
 
+                                graph.cells[c].nodes[n].output += \
+                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1) + \
+                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)  # Ltrain(w±, alpha)
+
                         if DEBUG:
                             print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].combined_feature_map.grad_fn = ",
                                   graph.cells[c].nodes[n].connections[cc].combined_feature_map.grad_fn)
@@ -406,40 +427,6 @@ def train_NN(forward_pass_only):
 
                             print("graph.cells[", c, "].output.grad_fn = ",
                                   graph.cells[c].output.grad_fn)
-
-                        # https://www.reddit.com/r/learnpython/comments/no7btk/how_to_carry_extra_information_across_dag/
-                        # https://docs.python.org/3/tutorial/datastructures.html
-
-                        # generates a supernet consisting of 'NUM_OF_CELLS' cells
-                        # each cell contains of 'NUM_OF_NODES_IN_EACH_CELL' nodes
-                        # refer to PNASNet https://arxiv.org/pdf/1712.00559.pdf#page=5 for the cell arrangement
-                        # https://pytorch.org/tutorials/beginner/examples_autograd/two_layer_net_custom_function.html
-
-                        # encodes the cells and nodes arrangement in the multigraph
-
-                        if n == 0:
-                            if c <= 1:
-                                graph.cells[c].nodes[n].output += graph.cells[c].nodes[n].connections[cc].combined_feature_map
-
-                            else:  # there is no input from previous cells for the first two cells
-                                # needs to take care tensor dimension mismatch from multiple edges connections
-                                graph.cells[c].nodes[n].output += \
-                                    graph.cells[c-1].output + graph.cells[c-PREVIOUS_PREVIOUS].output
-
-                        else:  # n > 0
-                            # depends on PREVIOUS node's Type 1 connection
-                            # needs to take care tensor dimension mismatch from multiple edges connections
-                            if DEBUG:
-                                print("graph.cells[", c ,"].nodes[" ,n, "].output.size() = ",
-                                      graph.cells[c].nodes[n].output.size())
-
-                                print("graph.cells[", c, "].nodes[", n-1, "].connections[", cc, "].combined_feature_map.size() = ",
-                                      graph.cells[c].nodes[n-1].connections[cc].combined_feature_map.size())
-
-                            graph.cells[c].nodes[n].output += \
-                                graph.cells[c].nodes[n-1].connections[cc].combined_feature_map + \
-                                graph.cells[c - 1].output + \
-                                graph.cells[c - PREVIOUS_PREVIOUS].output
 
                         if DEBUG:
                             print("graph.cells[", c, "].nodes[", n, "].output.grad_fn = ",
