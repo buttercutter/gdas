@@ -369,54 +369,57 @@ def train_NN(forward_pass_only):
                             if USE_CUDA:
                                 x = x.cuda()
 
+                            y = graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)
+
                             # combines all the feature maps from different mixed ops edges
                             graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                                graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
-                                graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Ltrain(w±, alpha)
+                                graph.cells[c].nodes[n].connections[cc].combined_feature_map + y  # Ltrain(w±, alpha)
 
-                            graph.cells[c].nodes[n].output += \
-                                graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)  # Ltrain(w±, alpha)
+                            graph.cells[c].nodes[n].output += y  # Ltrain(w±, alpha)
 
                         else:
                             if n == 0:
                                 # Uses feature map output from previous neighbour cells for further processing
                                 x1 = graph.cells[c-1].output
                                 x2 = graph.cells[c-PREVIOUS_PREVIOUS].output
+                                y1 = graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1)
+                                y2 = graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)
 
                                 # combines all the feature maps from different mixed ops edges
                                 graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
                                     graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
                                     graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1) + \
-                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)  # Ltrain(w±, alpha)
+                                    y1 + y2  # Ltrain(w±, alpha)
 
-                                graph.cells[c].nodes[n].output += \
-                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1) + \
-                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)  # Ltrain(w±, alpha)
+                                graph.cells[c].nodes[n].output += y1 + y2  # Ltrain(w±, alpha)
 
                             else:
                                 # Uses feature map output from previous neighbour nodes for further processing
                                 for ni in range(n):  # previous nodes only
                                     # connections[ni] for neighbour nodes only
                                     x = graph.cells[c].nodes[ni].connections[ni].combined_feature_map
+                                    y = graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)
 
                                     # combines all the feature maps from different mixed ops edges
                                     graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                                        graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
-                                        graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)
+                                        graph.cells[c].nodes[n].connections[cc].combined_feature_map + y
+
+                                    graph.cells[c].nodes[n].output += y
 
                                 # Uses feature map output from previous neighbour cells for further processing
                                 x1 = graph.cells[c - 1].output
                                 x2 = graph.cells[c - PREVIOUS_PREVIOUS].output
+                                y1 = graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1)
+                                y2 = graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)
 
                                 # combines all the feature maps from different mixed ops edges
                                 graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
                                     graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
-                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1) + \
-                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)  # Ltrain(w±, alpha)
+                                    y1 + y2  # Ltrain(w±, alpha)
 
                                 graph.cells[c].nodes[n].output += \
                                     graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1) + \
-                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)  # Ltrain(w±, alpha)
+                                    y1 + y2  # Ltrain(w±, alpha)
 
                         if DEBUG:
                             print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].combined_feature_map.grad_fn = ",
