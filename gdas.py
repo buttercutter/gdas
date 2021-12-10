@@ -377,7 +377,8 @@ def train_NN(forward_pass_only):
                                 graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
                                     graph.cells[c].nodes[n].connections[cc].combined_feature_map + y  # Ltrain(w±, alpha)
 
-                                graph.cells[c].nodes[n].output += y  # Ltrain(w±, alpha)
+                                graph.cells[c].nodes[n].output = \
+                                    graph.cells[c].nodes[n].connections[cc].combined_feature_map  # Ltrain(w±, alpha)
 
                             else:
                                 # Uses feature map output from previous neighbour nodes for further processing
@@ -391,7 +392,8 @@ def train_NN(forward_pass_only):
                                     graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
                                         graph.cells[c].nodes[n].connections[cc].combined_feature_map + y
 
-                                    graph.cells[c].nodes[n].output += y
+                                    graph.cells[c].nodes[n].output = \
+                                        graph.cells[c].nodes[n].connections[cc].combined_feature_map
 
                                 # Uses feature map output from previous neighbour cells for further processing
                                 x1 = graph.cells[c - 1].output
@@ -404,9 +406,8 @@ def train_NN(forward_pass_only):
                                     graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
                                     y1 + y2  # Ltrain(w±, alpha)
 
-                                graph.cells[c].nodes[n].output += \
-                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1) + \
-                                    y1 + y2  # Ltrain(w±, alpha)
+                                graph.cells[c].nodes[n].output = \
+                                    graph.cells[c].nodes[n].connections[cc].combined_feature_map  # Ltrain(w±, alpha)
 
                         else:
                             if n == 0:
@@ -421,7 +422,8 @@ def train_NN(forward_pass_only):
                                     graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
                                     y1 + y2  # Ltrain(w±, alpha)
 
-                                graph.cells[c].nodes[n].output += y1 + y2  # Ltrain(w±, alpha)
+                                graph.cells[c].nodes[n].output = \
+                                    graph.cells[c].nodes[n].connections[cc].combined_feature_map  # Ltrain(w±, alpha)
 
                             else:
                                 # Uses feature map output from previous neighbour nodes for further processing
@@ -435,7 +437,8 @@ def train_NN(forward_pass_only):
                                     graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
                                         graph.cells[c].nodes[n].connections[cc].combined_feature_map + y
 
-                                    graph.cells[c].nodes[n].output += y
+                                    graph.cells[c].nodes[n].output = \
+                                        graph.cells[c].nodes[n].connections[cc].combined_feature_map
 
                                 # Uses feature map output from previous neighbour cells for further processing
                                 x1 = graph.cells[c - 1].output
@@ -448,9 +451,8 @@ def train_NN(forward_pass_only):
                                     graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
                                     y1 + y2  # Ltrain(w±, alpha)
 
-                                graph.cells[c].nodes[n].output += \
-                                    graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1) + \
-                                    y1 + y2  # Ltrain(w±, alpha)
+                                graph.cells[c].nodes[n].output = \
+                                    graph.cells[c].nodes[n].connections[cc].combined_feature_map  # Ltrain(w±, alpha)
 
                         if DEBUG:
                             print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].combined_feature_map.grad_fn = ",
@@ -473,7 +475,7 @@ def train_NN(forward_pass_only):
                         # 'add' then 'concat' feature maps from different nodes
                         # needs to take care of tensor dimension mismatch
                         # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
-                        graph.cells[c].output += graph.cells[c].nodes[n].output
+                        graph.cells[c].output = graph.cells[c].output + graph.cells[c].nodes[n].output
 
                         if DEBUG:
                             print("graph.cells[", c, "].output.grad_fn = ",
@@ -628,7 +630,8 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                             x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
 
                         # need to take care of tensors dimension mismatch
-                        graph.cells[c].nodes[n].connections[cc].combined_feature_map += \
+                        graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
+                            graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
                             graph.cells[c].nodes[n].connections[cc].edges[e].forward_edge(x)  # Lval(w*, alpha)
 
         output2_tensor = graph.cells[NUM_OF_CELLS-1].output
