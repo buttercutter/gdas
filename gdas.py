@@ -36,7 +36,7 @@ MOMENTUM = 0.9
 NUM_OF_CELLS = 8
 NUM_OF_MIXED_OPS = 4
 NUM_OF_PREVIOUS_CELLS_OUTPUTS = 2  # last_cell_output , second_last_cell_output
-NUM_OF_NODES_IN_EACH_CELL = 4
+NUM_OF_NODES_IN_EACH_CELL = 5  # including the last node that combines the output from all 4 previous nodes
 MAX_NUM_OF_CONNECTIONS_PER_NODE = NUM_OF_NODES_IN_EACH_CELL
 NUM_OF_CHANNELS = 16
 INTERVAL_BETWEEN_REDUCTION_CELLS = 3
@@ -398,8 +398,8 @@ def train_NN(forward_pass_only):
                                 # Uses feature map output from previous neighbour cells for further processing
                                 x1 = graph.cells[c - 1].output
                                 x2 = graph.cells[c - PREVIOUS_PREVIOUS].output
-                                y1 = graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1)
-                                y2 = graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)
+                                y1 = graph.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edges[e].forward_f(x1)
+                                y2 = graph.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edges[e].forward_f(x2)
 
                                 # combines all the feature maps from different mixed ops edges
                                 graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
@@ -414,8 +414,8 @@ def train_NN(forward_pass_only):
                                 # Uses feature map output from previous neighbour cells for further processing
                                 x1 = graph.cells[c-1].output
                                 x2 = graph.cells[c-PREVIOUS_PREVIOUS].output
-                                y1 = graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1)
-                                y2 = graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)
+                                y1 = graph.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edges[e].forward_f(x1)
+                                y2 = graph.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edges[e].forward_f(x2)
 
                                 # combines all the feature maps from different mixed ops edges
                                 graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
@@ -443,8 +443,8 @@ def train_NN(forward_pass_only):
                                 # Uses feature map output from previous neighbour cells for further processing
                                 x1 = graph.cells[c - 1].output
                                 x2 = graph.cells[c - PREVIOUS_PREVIOUS].output
-                                y1 = graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x1)
-                                y2 = graph.cells[c].nodes[n].connections[cc].edges[e].forward_f(x2)
+                                y1 = graph.cells[c-1].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edges[e].forward_f(x1)
+                                y2 = graph.cells[c-PREVIOUS_PREVIOUS].nodes[NUM_OF_NODES_IN_EACH_CELL-1].connections[cc].edges[e].forward_f(x2)
 
                                 # combines all the feature maps from different mixed ops edges
                                 graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
@@ -668,8 +668,9 @@ def train_architecture(forward_pass_only, train_or_val='val'):
             Lval = Lval.requires_grad_()
             Lval.backward()
 
-            for name, param in graph.named_parameters():
-                print(name, param.grad)
+            if DEBUG:
+                for name, param in graph.named_parameters():
+                    print(name, param.grad)
 
             optimizer2.step()
 
