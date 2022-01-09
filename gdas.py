@@ -125,10 +125,10 @@ class ConvEdge(Edge):
         self.f = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(3, 3), stride=(stride, stride), padding=1)
 
 
-class LinearEdge(Edge):
-    def __init__(self):
-        super().__init__()
-        self.f = nn.Linear(84, 10)
+# class LinearEdge(Edge):
+#    def __init__(self):
+#        super().__init__()
+#        self.f = nn.Linear(84, 10)
 
 
 class MaxPoolEdge(Edge):
@@ -188,7 +188,7 @@ class Connection(nn.Module):
 
         # use linear transformation (weighted summation) to combine results from different edges
         self.combined_feature_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
-                                                requires_grad=True)
+                                                requires_grad=False)
 
         if USE_CUDA:
             self.combined_feature_map = self.combined_feature_map.cuda()
@@ -209,6 +209,12 @@ class Connection(nn.Module):
         gumbel = F.gumbel_softmax(self.edge_weights, tau=TAU_GUMBEL, hard=True)
         self.chosen_edge = torch.argmax(gumbel, dim=0)  # converts one-hot encoding into integer
 
+    def reinit(self):
+        self.combined_feature_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
+                                                requires_grad=False)
+        if USE_CUDA:
+            self.combined_feature_map = self.combined_feature_map.cuda()
+
 
 # to collect and manage multiple different connections between a particular node and its neighbouring nodes
 class Node(nn.Module):
@@ -225,8 +231,14 @@ class Node(nn.Module):
         # Type 2
         # depends on PREVIOUS node's Type 1 output
         self.output = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
-                                  requires_grad=True)  # for initialization
+                                  requires_grad=False)  # for initialization
 
+        if USE_CUDA:
+            self.output = self.output.cuda()
+
+    def reinit(self):
+        self.output = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
+                                  requires_grad=False)
         if USE_CUDA:
             self.output = self.output.cuda()
 
@@ -251,7 +263,7 @@ class Cell(nn.Module):
         self.previous_cell = 0
         self.previous_previous_cell = 0
         self.output = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
-                                  requires_grad=True)
+                                  requires_grad=False)
 
         if USE_CUDA:
             self.output = self.output.cuda()
@@ -261,6 +273,12 @@ class Cell(nn.Module):
             # needs to take care of tensor dimension mismatch
             # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
             self.output = self.output + self.nodes[n].output
+
+    def reinit(self):
+        self.output = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
+                                  requires_grad=False)
+        if USE_CUDA:
+            self.output = self.output.cuda()
 
 
 # to manage all nodes
@@ -420,20 +438,16 @@ class Graph(nn.Module):
                                       "].combined_feature_map.grad_fn = ",
                                       self.cells[c].nodes[n].connections[cc].combined_feature_map.grad_fn)
 
-                                print("graph.cells[", c, "].nodes[", n, "].connections[", cc, "].edge_weights[", e,
-                                      "].grad_fn = ",
-                                      self.cells[c].nodes[n].connections[cc].edge_weights[e].grad_fn)
-
                                 print("graph.cells[", c, "].output.grad_fn = ",
                                       self.cells[c].output.grad_fn)
 
-                            if DEBUG:
                                 print("graph.cells[", c, "].nodes[", n, "].output.grad_fn = ",
                                       self.cells[c].nodes[n].output.grad_fn)
 
-                                self.cells[c].nodes[n].output.retain_grad()
-                                print("gradwalk(graph.cells[", c, "].nodes[", n, "].output.grad_fn)")
-                                # gradwalk(graph.cells[c].nodes[n].output.grad_fn)
+                                if VISUALIZER == 0:
+                                    self.cells[c].nodes[n].output.retain_grad()
+                                    print("gradwalk(graph.cells[", c, "].nodes[", n, "].output.grad_fn)")
+                                    # gradwalk(graph.cells[c].nodes[n].output.grad_fn)
 
                             # 'add' then 'concat' feature maps from different nodes
                             # needs to take care of tensor dimension mismatch
@@ -444,9 +458,10 @@ class Graph(nn.Module):
                                 print("graph.cells[", c, "].output.grad_fn = ",
                                       self.cells[c].output.grad_fn)
 
-                                self.cells[c].output.retain_grad()
-                                print("gradwalk(graph.cells[", c, "].output.grad_fn)")
-                                # gradwalk(graph.cells[c].output.grad_fn)
+                                if VISUALIZER == 0:
+                                    self.cells[c].output.retain_grad()
+                                    print("gradwalk(graph.cells[", c, "].output.grad_fn)")
+                                    # gradwalk(graph.cells[c].output.grad_fn)
 
             output_tensor = self.cells[NUM_OF_CELLS - 1].output
             output_tensor = output_tensor.view(output_tensor.shape[0], -1)
@@ -454,7 +469,7 @@ class Graph(nn.Module):
             if USE_CUDA:
                 output_tensor = output_tensor.cuda()
 
-            if DEBUG:
+            if DEBUG and VISUALIZER == 0:
                 output_tensor.retain_grad()
                 print("gradwalk(output_tensor.grad_fn)")
                 # gradwalk(output_tensor.grad_fn)
@@ -469,6 +484,17 @@ class Graph(nn.Module):
 
             if USE_CUDA:
                 outputs1 = outputs1.cuda()
+
+            # See https://discuss.pytorch.org/t/tensorboard-issue-with-self-defined-forward-function/140628/20?u=promach
+            for c in range(NUM_OF_CELLS):
+                self.cells[c].reinit()
+
+                for n in range(NUM_OF_NODES_IN_EACH_CELL):
+                    self.cells[c].nodes[n].reinit()
+
+                    # not all nodes have same number of Type-1 output connection
+                    for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
+                        self.cells[c].nodes[n].connections[cc].reinit()
 
         return outputs1
 
