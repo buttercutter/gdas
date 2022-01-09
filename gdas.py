@@ -296,6 +296,8 @@ class Graph(nn.Module):
 
         self.cells = nn.ModuleList([Cell(stride) for i in range(NUM_OF_CELLS)])
 
+        self.linears = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
+
     # See https://www.reddit.com/r/pytorch/comments/rtlvtk/tensorboard_issue_with_selfdefined_forward/
     # Tensorboard visualization requires a generic forward() function
     def forward(self, x):
@@ -475,12 +477,10 @@ class Graph(nn.Module):
                 # gradwalk(output_tensor.grad_fn)
 
             if USE_CUDA:
-                m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES).cuda()
+                outputs1 = self.linears(output_tensor).cuda()
 
             else:
-                m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
-
-            outputs1 = m_linear(output_tensor)
+                outputs1 = self.linears(output_tensor)
 
             if USE_CUDA:
                 outputs1 = outputs1.cuda()
