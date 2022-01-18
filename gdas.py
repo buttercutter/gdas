@@ -348,18 +348,19 @@ class Graph(nn.Module):
 
                                 else:
                                     # Uses feature map output from previous neighbour nodes for further processing
-                                    for ni in range(n):
-                                        # nodes[ni] for previous nodes only
-                                        # connections[ni] for neighbour nodes only
-                                        x = self.cells[c].nodes[ni].connections[ni].combined_feature_map
-                                        y = self.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)
+                                    for ni in range(n+1):
+                                        for ci in range(cc+1):
+                                            # nodes[ni] for previous nodes only
+                                            # connections[ci] for neighbour nodes only
+                                            x = self.cells[c].nodes[ni].connections[ci].combined_feature_map
+                                            y = self.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)
 
-                                        # combines all the feature maps from different mixed ops edges
-                                        self.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                                            self.cells[c].nodes[n].connections[cc].combined_feature_map + y
+                                            # combines all the feature maps from different mixed ops edges
+                                            self.cells[c].nodes[n].connections[cc].combined_feature_map = \
+                                                self.cells[c].nodes[n].connections[cc].combined_feature_map + y
 
-                                        self.cells[c].nodes[n].output = \
-                                            self.cells[c].nodes[n].connections[cc].combined_feature_map
+                                            self.cells[c].nodes[n].output = \
+                                                self.cells[c].nodes[n].connections[cc].combined_feature_map
 
                                     # Uses feature map output from previous neighbour cells for further processing
                                     x1 = self.cells[c - 1].output
