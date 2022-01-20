@@ -9,7 +9,7 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 
-VISUALIZER = 1
+VISUALIZER = 0
 DEBUG = 1
 
 if VISUALIZER:
@@ -348,8 +348,8 @@ class Graph(nn.Module):
 
                                 else:
                                     # Uses feature map output from previous neighbour nodes for further processing
-                                    for ni in range(n+1):
-                                        for ci in range(cc+1):
+                                    for ni in range(n):
+                                        for ci in range(cc):
                                             # nodes[ni] for previous nodes only
                                             # connections[ci] for neighbour nodes only
                                             x = self.cells[c].nodes[ni].connections[ci].combined_feature_map
@@ -405,17 +405,18 @@ class Graph(nn.Module):
                                 else:
                                     # Uses feature map output from previous neighbour nodes for further processing
                                     for ni in range(n):
-                                        # nodes[ni] for previous nodes only
-                                        # connections[ni] for neighbour nodes only
-                                        x = self.cells[c].nodes[ni].connections[ni].combined_feature_map
-                                        y = self.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)
+                                        for ci in range(cc):
+                                            # nodes[ni] for previous nodes only
+                                            # connections[ci] for neighbour nodes only
+                                            x = self.cells[c].nodes[ni].connections[ci].combined_feature_map
+                                            y = self.cells[c].nodes[n].connections[cc].edges[e].forward_f(x)
 
-                                        # combines all the feature maps from different mixed ops edges
-                                        self.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                                            self.cells[c].nodes[n].connections[cc].combined_feature_map + y
+                                            # combines all the feature maps from different mixed ops edges
+                                            self.cells[c].nodes[n].connections[cc].combined_feature_map = \
+                                                self.cells[c].nodes[n].connections[cc].combined_feature_map + y
 
-                                        self.cells[c].nodes[n].output = \
-                                            self.cells[c].nodes[n].connections[cc].combined_feature_map
+                                            self.cells[c].nodes[n].output = \
+                                                self.cells[c].nodes[n].connections[cc].combined_feature_map
 
                                     # Uses feature map output from previous neighbour cells for further processing
                                     x1 = self.cells[c - 1].output
@@ -571,7 +572,7 @@ def train_NN(forward_pass_only):
         # zero the parameter gradients
         optimizer1.zero_grad()
 
-        #  do train thing for architecture edge weights
+        #  do train thing for internal NN function weights
         NN_output = graph.forward(NN_input)
 
     if VISUALIZER:
@@ -648,7 +649,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     val_labels = 0
 
     if forward_pass_only == 0:
-        #  do train thing for internal NN function weights
+        #  do train thing for architecture edge weights
         graph.train()
 
         # zero the parameter gradients
@@ -821,7 +822,7 @@ if __name__ == "__main__":
         ltrain = train_NN(forward_pass_only=0)
         print("Finished train_NN()")
 
-        if VISUALIZER:
+        if VISUALIZER or DEBUG:
             break  # visualizer does not need more than a single run
 
         # 'train_or_val' to differentiate between using training dataset and validation dataset
