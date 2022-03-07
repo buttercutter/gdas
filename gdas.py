@@ -15,7 +15,8 @@ DEBUG = 1
 if VISUALIZER:
     # https://pytorch.org/tutorials/intermediate/tensorboard_tutorial.html
     from torch.utils.tensorboard import SummaryWriter
-    #from tensorboardX import SummaryWriter
+
+    # from tensorboardX import SummaryWriter
 
     # default `log_dir` is "runs" - we'll be more specific here
     writer = SummaryWriter('runs/gdas_experiment_1')
@@ -124,7 +125,7 @@ class Edge(nn.Module):
 
         if types == "f":
             y_hat = self.forward_f(x)
-            
+
         elif types == "edge":
             y_hat = self.forward_edge(x)
 
@@ -540,6 +541,24 @@ def gradwalk(x, _depth=0):
             gradwalk(fn[0], _depth + 1)
 
 
+# Function to Convert to ONNX
+def Convert_ONNX(model, model_input):
+
+    # Export the model
+    torch.onnx.export(model,         # model being run
+                      model_input,       # model input (or a tuple for multiple inputs)
+                      "gdas.onnx",       # where to save the model
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=10,    # the ONNX version to export the model to
+                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                      input_names = ['modelInput'],   # the model's input names
+                      output_names = ['modelOutput'],  # the model's output names
+                      dynamic_axes={'modelInput': {0: 'batch_size'},    # variable length axes
+                                    'modelOutput': {0: 'batch_size'}})
+    print(" ")
+    print('Model has been converted to ONNX')
+
+
 # https://translate.google.com/translate?sl=auto&tl=en&u=http://khanrc.github.io/nas-4-darts-tutorial.html
 def train_NN(forward_pass_only):
     if DEBUG:
@@ -586,6 +605,9 @@ def train_NN(forward_pass_only):
         NN_output = graph.forward(NN_input)
 
     if VISUALIZER:
+        # netron https://docs.microsoft.com/zh-cn/windows/ai/windows-ml/tutorials/pytorch-convert-model
+        Convert_ONNX(graph, NN_input)
+
         writer.add_graph(graph, NN_input)
         writer.close()
 
@@ -843,4 +865,5 @@ if __name__ == "__main__":
         run_num = run_num + 1
 
     #  do test thing
+
 
