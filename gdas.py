@@ -118,7 +118,16 @@ class Edge(nn.Module):
         self.__freeze_f()
         self.__unfreeze_w()
 
-        return x * self.weights
+        # Refer to GDAS equations (5) and (6)
+        # if one_hot is already there, would summation be required given that all other entries are forced to 0 ?
+        # It's not required, but you don't know, which index is one hot encoded 1.
+        # https://pytorch.org/docs/stable/nn.functional.html#gumbel-softmax
+        # See also https://github.com/D-X-Y/AutoDL-Projects/issues/10#issuecomment-916619163
+
+        gumbel = F.gumbel_softmax(x, tau=TAU_GUMBEL, hard=True)
+        chosen_edge = torch.argmax(gumbel, dim=0)  # converts one-hot encoding into integer
+
+        return chosen_edge
 
     def forward(self, x, types):
         y_hat = None
@@ -212,15 +221,6 @@ class Connection(nn.Module):
 
             # https://stackoverflow.com/a/45024500/8776167 extracts the weights learned through NN functions
             # self.f_weights[e] = list(self.edges[e].parameters())
-
-        # Refer to GDAS equations (5) and (6)
-        # if one_hot is already there, would summation be required given that all other entries are forced to 0 ?
-        # It's not required, but you don't know, which index is one hot encoded 1.
-        # https://pytorch.org/docs/stable/nn.functional.html#gumbel-softmax
-        # See also https://github.com/D-X-Y/AutoDL-Projects/issues/10#issuecomment-916619163
-
-        gumbel = F.gumbel_softmax(self.edge_weights, tau=TAU_GUMBEL, hard=True)
-        self.chosen_edge = torch.argmax(gumbel, dim=0)  # converts one-hot encoding into integer
 
     def reinit(self):
         self.combined_feature_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
@@ -709,18 +709,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
             # not all nodes have same number of Type-1 output connection
             for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
                 for e in range(NUM_OF_MIXED_OPS):
-                    x = 0  # depends on the input tensor dimension requirement
-
-                    if c == 0:
-                        if train_or_val == 'val':
-                            x = val_inputs
-
-                        else:
-                            x = train_inputs
-
-                    else:
-                        # Uses feature map output from previous neighbour node for further processing
-                        x = graph.cells[c].nodes[n-1].connections[cc].combined_feature_map
+                    x = graph.cells[c].nodes[n].connections[cc].edge_weights[e]
 
                     # need to take care of tensors dimension mismatch
                     graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
@@ -853,7 +842,8 @@ if __name__ == "__main__":
         print("Finished train_NN()")
 
         if VISUALIZER or DEBUG:
-            break  # visualizer does not need more than a single run
+            if run_num > 1:
+                break  # just for debugging
 
         # 'train_or_val' to differentiate between using training dataset and validation dataset
         lval = train_architecture(forward_pass_only=0, train_or_val='val')
