@@ -711,10 +711,10 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                 for e in range(NUM_OF_MIXED_OPS):
                     x = graph.cells[c].nodes[n].connections[cc].edge_weights[e]
 
-                    # need to take care of tensors dimension mismatch
-                    graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                        graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
-                        graph.cells[c].nodes[n].connections[cc].edges[e].forward(x, "edge")  # Lval(w*, alpha)
+                    with torch.no_grad():
+                        # need to take care of tensors dimension mismatch
+                        graph.cells[c].nodes[n].connections[cc].edge_weights[e] += \
+                            graph.cells[c].nodes[n].connections[cc].edges[e].forward(x, "edge")  # Lval(w*, alpha)
 
     output2_tensor = graph.cells[NUM_OF_CELLS-1].output
     output2_tensor = output2_tensor.view(output2_tensor.shape[0], -1)
@@ -841,13 +841,13 @@ if __name__ == "__main__":
         ltrain = train_NN(forward_pass_only=0)
         print("Finished train_NN()")
 
-        if VISUALIZER or DEBUG:
-            if run_num > 1:
-                break  # just for debugging
-
         # 'train_or_val' to differentiate between using training dataset and validation dataset
         lval = train_architecture(forward_pass_only=0, train_or_val='val')
         print("Finished train_architecture()")
+
+        if VISUALIZER or DEBUG:
+            if run_num > 1:
+                break  # just for debugging
 
         print("lval = ", lval, " , ltrain = ", ltrain)
         not_converged = (lval > 0.01) or (ltrain > 0.01)
