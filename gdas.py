@@ -498,16 +498,16 @@ class Graph(nn.Module):
             if USE_CUDA:
                 outputs1 = outputs1.cuda()
 
-            # See https://discuss.pytorch.org/t/tensorboard-issue-with-self-defined-forward-function/140628/20?u=promach
-            for c in range(NUM_OF_CELLS):
-                self.cells[c].reinit()
+        # See https://discuss.pytorch.org/t/tensorboard-issue-with-self-defined-forward-function/140628/20?u=promach
+        for c in range(NUM_OF_CELLS):
+            self.cells[c].reinit()
 
-                for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                    self.cells[c].nodes[n].reinit()
+            for n in range(NUM_OF_NODES_IN_EACH_CELL):
+                self.cells[c].nodes[n].reinit()
 
-                    # not all nodes have same number of Type-1 output connection
-                    for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                        self.cells[c].nodes[n].connections[cc].reinit()
+                # not all nodes have same number of Type-1 output connection
+                for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
+                    self.cells[c].nodes[n].connections[cc].reinit()
 
         return outputs1
 
