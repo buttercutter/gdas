@@ -485,7 +485,7 @@ class Graph(nn.Module):
                 output_tensor = output_tensor.cuda()
 
             if DEBUG and VISUALIZER == 0:
-                output_tensor.retain_grad()
+                # output_tensor.retain_grad()
                 print("gradwalk(output_tensor.grad_fn)")
                 # gradwalk(output_tensor.grad_fn)
 
