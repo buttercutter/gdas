@@ -9,8 +9,13 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 
-VISUALIZER = 1
+import tensorflow as tf
+
+# import numpy as np
+
+VISUALIZER = 0
 DEBUG = 1
+logdir = 'runs/gdas_experiment_1'
 
 if VISUALIZER:
     # https://pytorch.org/tutorials/intermediate/tensorboard_tutorial.html
@@ -19,13 +24,14 @@ if VISUALIZER:
     # from tensorboardX import SummaryWriter
 
     # default `log_dir` is "runs" - we'll be more specific here
-    writer = SummaryWriter('runs/gdas_experiment_1')
+    writer = SummaryWriter(logdir)
 
     # https://github.com/szagoruyko/pytorchviz
     from torchviz import make_dot
 
-# import numpy as np
-torch.autograd.set_detect_anomaly(True)
+if DEBUG:
+    torch.autograd.set_detect_anomaly(True)
+    tf.debugging.experimental.enable_dump_debug_info(logdir, tensor_debug_mode="FULL_HEALTH", circular_buffer_size=-1)
 
 USE_CUDA = torch.cuda.is_available()
 
@@ -130,7 +136,9 @@ class Edge(nn.Module):
         return chosen_edge
 
     def forward(self, x, types):
-        y_hat = None
+        y_hat = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH], requires_grad=False)
+        if USE_CUDA:
+            y_hat = y_hat.cuda()
 
         if types == "f":
             y_hat = self.forward_f(x)
@@ -201,6 +209,8 @@ class Connection(nn.Module):
         # python list will break the computation graph, need to use nn.ModuleList as a differentiable python list
         self.edges = nn.ModuleList([self.conv2d_edge, self.maxpool_edge, self.avgpool_edge, self.skip_edge])
         self.edge_weights = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
+        # self.edges_results = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
+        #                                  requires_grad=False)
 
         # for approximate architecture gradient
         self.f_weights = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
@@ -227,6 +237,19 @@ class Connection(nn.Module):
                                                 requires_grad=False)
         if USE_CUDA:
             self.combined_feature_map = self.combined_feature_map.cuda()
+
+    # See https://www.reddit.com/r/pytorch/comments/rtlvtk/tensorboard_issue_with_selfdefined_forward/
+    # Tensorboard visualization requires a generic forward() function
+    def forward(self, x, types=None):
+        edges_results = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
+                                    requires_grad=True)
+        if USE_CUDA:
+            edges_results = edges_results.cuda()
+
+        for e in range(NUM_OF_MIXED_OPS):
+            edges_results = edges_results + self.edges[e].forward(x, types)
+
+        return edges_results
 
 
 # to collect and manage multiple different connections between a particular node and its neighbouring nodes
@@ -255,6 +278,28 @@ class Node(nn.Module):
         if USE_CUDA:
             self.output = self.output.cuda()
 
+    # See https://www.reddit.com/r/pytorch/comments/rtlvtk/tensorboard_issue_with_selfdefined_forward/
+    # Tensorboard visualization requires a generic forward() function
+    def forward(self, x, node_num=0, types=None):
+        value = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
+                            requires_grad=False)
+
+        # not all nodes have same number of Type-1 output connection
+        for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - node_num - 1):
+            y = self.connections[cc].forward(x, types)
+
+            # tensorflow does not like the use of self.variable inside def forward() unlike in Pytorch.
+            # Tensorflow prefers the use of a new intermediate variable instead of self.variable
+            value = self.connections[cc].combined_feature_map
+
+            # combines all the feature maps from different mixed ops edges
+            value = value + y  # Ltrain(w±, alpha)
+
+            # stores the addition result for next for loop index
+            self.connections[cc].combined_feature_map = value
+
+        return value
+
 
 # to manage all nodes within a cell
 class Cell(nn.Module):
@@ -281,17 +326,97 @@ class Cell(nn.Module):
         if USE_CUDA:
             self.output = self.output.cuda()
 
-        for n in range(NUM_OF_NODES_IN_EACH_CELL):
-            # 'add' then 'concat' feature maps from different nodes
-            # needs to take care of tensor dimension mismatch
-            # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
-            self.output = self.output + self.nodes[n].output
-
     def reinit(self):
         self.output = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
                                   requires_grad=False)
         if USE_CUDA:
             self.output = self.output.cuda()
+
+    # See https://www.reddit.com/r/pytorch/comments/rtlvtk/tensorboard_issue_with_selfdefined_forward/
+    # Tensorboard visualization requires a generic forward() function
+    def forward(self, x, x1, x2, c=0, types=None):
+
+        value = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
+                            requires_grad=False)
+
+        for n in range(NUM_OF_NODES_IN_EACH_CELL):
+            if c <= 1:
+                if n == 0:
+                    # Uses datasets as input
+                    # x = train_inputs
+
+                    if USE_CUDA:
+                        x = x.cuda()
+
+                    # combines all the feature maps from different mixed ops edges
+                    self.nodes[n].output = \
+                        self.nodes[n].forward(x, node_num=n, types=types)  # Ltrain(w±, alpha)
+
+                else:
+                    # Uses feature map output from previous neighbour nodes for further processing
+                    for ni in range(n):
+                        # nodes[ni] for previous nodes only
+                        # connections[n-1] for neighbour nodes only
+                        x = self.nodes[ni].connections[n-1].combined_feature_map
+                        y = self.nodes[ni].forward(x, node_num=n, types=types)  # Ltrain(w±, alpha)
+
+                        # combines all the feature maps from different mixed ops edges
+                        self.nodes[n].output = \
+                            self.nodes[n].forward(y, node_num=n, types=types)  # Ltrain(w±, alpha)
+
+                    # Uses feature map output from previous neighbour cells for further processing
+                    y1 = self.nodes[NUM_OF_NODES_IN_EACH_CELL - 1].forward(x1, node_num=n, types=types)
+                    y2 = self.nodes[NUM_OF_NODES_IN_EACH_CELL - 1].forward(x2, node_num=n, types=types)
+
+                    # combines all the feature maps from different mixed ops edges
+                    self.nodes[n].output = \
+                        self.nodes[n].forward(y1 + y2, node_num=n, types=types)  # Ltrain(w±, alpha)
+
+            else:
+                if n == 0:
+                    # Uses feature map output from previous neighbour cells for further processing
+                    y1 = self.nodes[NUM_OF_NODES_IN_EACH_CELL - 1].forward(x1, node_num=n, types=types)
+                    y2 = self.nodes[NUM_OF_NODES_IN_EACH_CELL - 1].forward(x2, node_num=n, types=types)
+
+                    # combines all the feature maps from different mixed ops edges
+                    self.nodes[n].output = \
+                        self.nodes[n].forward(y1 + y2, node_num=n, types=types)  # Ltrain(w±, alpha)
+
+                else:
+                    # Uses feature map output from previous neighbour nodes for further processing
+                    for ni in range(n):
+                        # nodes[ni] for previous nodes only
+                        # connections[n-1] for neighbour nodes only
+                        x = self.nodes[ni].connections[n-1].combined_feature_map
+                        y = self.nodes[ni].forward(x, node_num=n, types=types)  # Ltrain(w±, alpha)
+
+                        # combines all the feature maps from different mixed ops edges
+                        self.nodes[n].output = \
+                            self.nodes[n].forward(y, node_num=n, types=types)  # Ltrain(w±, alpha)
+
+                    # Uses feature map output from previous neighbour cells for further processing
+                    y1 = self.nodes[NUM_OF_NODES_IN_EACH_CELL - 1].forward(x1, node_num=n, types=types)
+                    y2 = self.nodes[NUM_OF_NODES_IN_EACH_CELL - 1].forward(x2, node_num=n, types=types)
+
+                    # combines all the feature maps from different mixed ops edges
+                    self.nodes[n].output = \
+                        self.nodes[n].forward(y1 + y2, node_num=n, types=types)  # Ltrain(w±, alpha)
+
+            # 'add' then 'concat' feature maps from different nodes
+            # needs to take care of tensor dimension mismatch
+            # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
+            # self.output = self.output + self.nodes[n].output
+
+            # tensorflow does not like the use of self.variable inside def forward() unlike in Pytorch.
+            # Tensorflow prefers the use of a new intermediate variable instead of self.variable
+            value = self.output
+
+            if USE_CUDA:
+                self.nodes[n].output = self.nodes[n].output.cuda()
+                value = value.cuda()
+
+            value = value + self.nodes[n].output
+            self.output = value
 
 
 # to manage all nodes
@@ -299,36 +424,31 @@ class Graph(nn.Module):
     def __init__(self):
         super(Graph, self).__init__()
 
-        stride = 0  # just to initialize a variable
+        stride = 1  # just to initialize a variable
 
-        for i in range(NUM_OF_CELLS):
-            if i % INTERVAL_BETWEEN_REDUCTION_CELLS == 0:
-                stride = REDUCTION_STRIDE  # to emulate reduction cell by using normal cell with stride=2
-            else:
-                stride = NORMAL_STRIDE  # normal cell
+        # for i in range(NUM_OF_CELLS):
+        #    if i % INTERVAL_BETWEEN_REDUCTION_CELLS == 0:
+        #        stride = REDUCTION_STRIDE  # to emulate reduction cell by using normal cell with stride=2
+        #    else:
+        #        stride = NORMAL_STRIDE  # normal cell
 
         self.cells = nn.ModuleList([Cell(stride) for i in range(NUM_OF_CELLS)])
 
         self.linears = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
 
-    # See https://www.reddit.com/r/pytorch/comments/rtlvtk/tensorboard_issue_with_selfdefined_forward/
-    # Tensorboard visualization requires a generic forward() function
-    def forward(self, x):
+    def reinit(self):
+        # See https://discuss.pytorch.org/t/tensorboard-issue-with-self-defined-forward-function/140628/20?u=promach
+        for c in range(NUM_OF_CELLS):
+            self.cells[c].reinit()
 
-        train_inputs = x
+            for n in range(NUM_OF_NODES_IN_EACH_CELL):
+                self.cells[c].nodes[n].reinit()
 
-        # https://www.reddit.com/r/learnpython/comments/no7btk/how_to_carry_extra_information_across_dag/
-        # https://docs.python.org/3/tutorial/datastructures.html
+                # not all nodes have same number of Type-1 output connection
+                for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
+                    self.cells[c].nodes[n].connections[cc].reinit()
 
-        # generates a supernet consisting of 'NUM_OF_CELLS' cells
-        # each cell contains of 'NUM_OF_NODES_IN_EACH_CELL' nodes
-        # refer to PNASNet https://arxiv.org/pdf/1712.00559.pdf#page=5 for the cell arrangement
-        # https://pytorch.org/tutorials/beginner/examples_autograd/two_layer_net_custom_function.html
-
-        # encodes the cells and nodes arrangement in the multigraph
-
-        outputs1 = 0  # just for initialization, no special meaning
-
+    def print_debug(self):
         for c in range(NUM_OF_CELLS):
             for n in range(NUM_OF_NODES_IN_EACH_CELL):
                 # not all nodes have same number of Type-1 output connection
@@ -338,117 +458,6 @@ class Graph(nn.Module):
                         if DEBUG:
                             print("c = ", c, " , n = ", n, " , cc = ", cc, " , e = ", e)
 
-                        if c <= 1:
-                            if n == 0:
-                                # Uses datasets as input
-                                x = train_inputs
-
-                                if USE_CUDA:
-                                    x = x.cuda()
-
-                                y = self.cells[c].nodes[n].connections[cc].edges[e].forward(x, "f")
-
-                                # combines all the feature maps from different mixed ops edges
-                                self.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                                    self.cells[c].nodes[n].connections[
-                                        cc].combined_feature_map + y  # Ltrain(w±, alpha)
-
-                                self.cells[c].nodes[n].output = \
-                                    self.cells[c].nodes[n].connections[
-                                        cc].combined_feature_map  # Ltrain(w±, alpha)
-
-                            else:
-                                # Uses feature map output from previous neighbour nodes for further processing
-                                for ni in range(n):
-                                    for ci in range(cc):
-                                        # nodes[ni] for previous nodes only
-                                        # connections[ci] for neighbour nodes only
-                                        x = self.cells[c].nodes[ni].connections[ci].combined_feature_map
-                                        y = self.cells[c].nodes[n].connections[cc].edges[e].forward(x, "f")
-
-                                        # combines all the feature maps from different mixed ops edges
-                                        self.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                                            self.cells[c].nodes[n].connections[cc].combined_feature_map + y
-
-                                        self.cells[c].nodes[n].output = \
-                                            self.cells[c].nodes[n].connections[cc].combined_feature_map
-
-                                # Uses feature map output from previous neighbour cells for further processing
-                                x1 = self.cells[c - 1].output
-                                x2 = self.cells[c - PREVIOUS_PREVIOUS].output
-                                y1 = self.cells[c - 1].nodes[NUM_OF_NODES_IN_EACH_CELL - 1].connections[cc].edges[
-                                    e].forward(x1, "f")
-                                y2 = \
-                                    self.cells[c - PREVIOUS_PREVIOUS].nodes[
-                                        NUM_OF_NODES_IN_EACH_CELL - 1].connections[
-                                        cc].edges[e].forward(x2, "f")
-
-                                # combines all the feature maps from different mixed ops edges
-                                self.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                                    self.cells[c].nodes[n].connections[cc].combined_feature_map + \
-                                    y1 + y2  # Ltrain(w±, alpha)
-
-                                self.cells[c].nodes[n].output = \
-                                    self.cells[c].nodes[n].connections[
-                                        cc].combined_feature_map  # Ltrain(w±, alpha)
-
-                        else:
-                            if n == 0:
-                                # Uses feature map output from previous neighbour cells for further processing
-                                x1 = self.cells[c - 1].output
-                                x2 = self.cells[c - PREVIOUS_PREVIOUS].output
-                                y1 = self.cells[c - 1].nodes[NUM_OF_NODES_IN_EACH_CELL - 1].connections[cc].edges[
-                                    e].forward(x1, "f")
-                                y2 = \
-                                    self.cells[c - PREVIOUS_PREVIOUS].nodes[
-                                        NUM_OF_NODES_IN_EACH_CELL - 1].connections[
-                                        cc].edges[e].forward(x2, "f")
-
-                                # combines all the feature maps from different mixed ops edges
-                                self.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                                    self.cells[c].nodes[n].connections[cc].combined_feature_map + \
-                                    y1 + y2  # Ltrain(w±, alpha)
-
-                                self.cells[c].nodes[n].output = \
-                                    self.cells[c].nodes[n].connections[
-                                        cc].combined_feature_map  # Ltrain(w±, alpha)
-
-                            else:
-                                # Uses feature map output from previous neighbour nodes for further processing
-                                for ni in range(n):
-                                    for ci in range(cc):
-                                        # nodes[ni] for previous nodes only
-                                        # connections[ci] for neighbour nodes only
-                                        x = self.cells[c].nodes[ni].connections[ci].combined_feature_map
-                                        y = self.cells[c].nodes[n].connections[cc].edges[e].forward(x, "f")
-
-                                        # combines all the feature maps from different mixed ops edges
-                                        self.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                                            self.cells[c].nodes[n].connections[cc].combined_feature_map + y
-
-                                        self.cells[c].nodes[n].output = \
-                                            self.cells[c].nodes[n].connections[cc].combined_feature_map
-
-                                # Uses feature map output from previous neighbour cells for further processing
-                                x1 = self.cells[c - 1].output
-                                x2 = self.cells[c - PREVIOUS_PREVIOUS].output
-                                y1 = self.cells[c - 1].nodes[NUM_OF_NODES_IN_EACH_CELL - 1].connections[cc].edges[
-                                    e].forward(x1, "f")
-                                y2 = \
-                                    self.cells[c - PREVIOUS_PREVIOUS].nodes[
-                                        NUM_OF_NODES_IN_EACH_CELL - 1].connections[
-                                        cc].edges[e].forward(x2, "f")
-
-                                # combines all the feature maps from different mixed ops edges
-                                self.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                                    self.cells[c].nodes[n].connections[cc].combined_feature_map + \
-                                    y1 + y2  # Ltrain(w±, alpha)
-
-                                self.cells[c].nodes[n].output = \
-                                    self.cells[c].nodes[n].connections[
-                                        cc].combined_feature_map  # Ltrain(w±, alpha)
-
-                        if DEBUG:
                             print("graph.cells[", c, "].nodes[", n, "].connections[", cc,
                                   "].combined_feature_map.grad_fn = ",
                                   self.cells[c].nodes[n].connections[cc].combined_feature_map.grad_fn)
@@ -464,11 +473,6 @@ class Graph(nn.Module):
                                 print("gradwalk(graph.cells[", c, "].nodes[", n, "].output.grad_fn)")
                                 # gradwalk(graph.cells[c].nodes[n].output.grad_fn)
 
-                        # 'add' then 'concat' feature maps from different nodes
-                        # needs to take care of tensor dimension mismatch
-                        # See https://github.com/D-X-Y/AutoDL-Projects/issues/99#issuecomment-869100416
-                        self.cells[c].output = self.cells[c].output + self.cells[c].nodes[n].output
-
                         if DEBUG:
                             print("graph.cells[", c, "].output.grad_fn = ",
                                   self.cells[c].output.grad_fn)
@@ -478,36 +482,48 @@ class Graph(nn.Module):
                                 print("gradwalk(graph.cells[", c, "].output.grad_fn)")
                                 # gradwalk(graph.cells[c].output.grad_fn)
 
-            output_tensor = self.cells[NUM_OF_CELLS - 1].output
-            output_tensor = output_tensor.view(output_tensor.shape[0], -1)
+    # See https://www.reddit.com/r/pytorch/comments/rtlvtk/tensorboard_issue_with_selfdefined_forward/
+    # Tensorboard visualization requires a generic forward() function
+    def forward(self, x, types=None):
 
-            if USE_CUDA:
-                output_tensor = output_tensor.cuda()
+        # train_inputs = x
 
-            if DEBUG and VISUALIZER == 0:
-                # output_tensor.retain_grad()
-                print("gradwalk(output_tensor.grad_fn)")
-                # gradwalk(output_tensor.grad_fn)
+        # https://www.reddit.com/r/learnpython/comments/no7btk/how_to_carry_extra_information_across_dag/
+        # https://docs.python.org/3/tutorial/datastructures.html
 
-            if USE_CUDA:
-                outputs1 = self.linears(output_tensor).cuda()
+        # generates a supernet consisting of 'NUM_OF_CELLS' cells
+        # each cell contains of 'NUM_OF_NODES_IN_EACH_CELL' nodes
+        # refer to PNASNet https://arxiv.org/pdf/1712.00559.pdf#page=5 for the cell arrangement
+        # https://pytorch.org/tutorials/beginner/examples_autograd/two_layer_net_custom_function.html
 
-            else:
-                outputs1 = self.linears(output_tensor)
+        # encodes the cells and nodes arrangement in the multigraph
 
-            if USE_CUDA:
-                outputs1 = outputs1.cuda()
+        outputs1 = 0  # just for initialization, no special meaning
 
-        # See https://discuss.pytorch.org/t/tensorboard-issue-with-self-defined-forward-function/140628/20?u=promach
         for c in range(NUM_OF_CELLS):
-            self.cells[c].reinit()
+            x1 = self.cells[c - 1].output
+            x2 = self.cells[c - PREVIOUS_PREVIOUS].output
 
-            for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                self.cells[c].nodes[n].reinit()
+            self.cells[c].forward(x, x1, x2, c, types=types)
 
-                # not all nodes have same number of Type-1 output connection
-                for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                    self.cells[c].nodes[n].connections[cc].reinit()
+        output_tensor = self.cells[NUM_OF_CELLS - 1].output
+        output_tensor = output_tensor.view(output_tensor.shape[0], -1)
+
+        if USE_CUDA:
+            output_tensor = output_tensor.cuda()
+
+        if DEBUG and VISUALIZER == 0:
+            print("gradwalk(output_tensor.grad_fn)")
+            # gradwalk(output_tensor.grad_fn)
+
+        if USE_CUDA:
+            outputs1 = self.linears(output_tensor).cuda()
+
+        else:
+            outputs1 = self.linears(output_tensor)
+
+        if USE_CUDA:
+            outputs1 = outputs1.cuda()
 
         return outputs1
 
@@ -602,15 +618,17 @@ def train_NN(forward_pass_only):
         optimizer1.zero_grad()
 
         #  do train thing for internal NN function weights
-        NN_output = graph.forward(NN_input)
+        NN_output = graph.forward(NN_input, types="f")
 
     if VISUALIZER:
         # netron https://docs.microsoft.com/zh-cn/windows/ai/windows-ml/tutorials/pytorch-convert-model
         Convert_ONNX(graph, NN_input)
 
+        # tensorboard
         writer.add_graph(graph, NN_input)
         writer.close()
 
+        # graphviz
         make_dot(NN_output.mean(), params=dict(graph.named_parameters())).render("gdas_torchviz", format="svg")
 
     if DEBUG:
@@ -644,8 +662,11 @@ def train_NN(forward_pass_only):
             print("finished gradwalk()")
 
         optimizer1.step()
+        graph.reinit()
 
     else:
+        graph.reinit()
+
         # no need to save model parameters for next epoch
         return Ltrain
 
@@ -709,14 +730,25 @@ def train_architecture(forward_pass_only, train_or_val='val'):
             # not all nodes have same number of Type-1 output connection
             for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
                 for e in range(NUM_OF_MIXED_OPS):
-                    x = graph.cells[c].nodes[n].connections[cc].edge_weights[e]
+                    x = 0  # depends on the input tensor dimension requirement
 
-                    with torch.no_grad():
-                        # need to take care of tensors dimension mismatch
-                        graph.cells[c].nodes[n].connections[cc].edge_weights[e] += \
-                            graph.cells[c].nodes[n].connections[cc].edges[e].forward(x, "edge")  # Lval(w*, alpha)
+                    if c == 0:
+                        if train_or_val == 'val':
+                            x = val_inputs
 
-    output2_tensor = graph.cells[NUM_OF_CELLS-1].output
+                        else:
+                            x = train_inputs
+
+                    else:
+                        # Uses feature map output from previous neighbour node for further processing
+                        x = graph.cells[c].nodes[n - 1].connections[cc].combined_feature_map
+
+                    # need to take care of tensors dimension mismatch
+                    graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
+                        graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
+                        graph.cells[c].nodes[n].connections[cc].edges[e].forward(x, "edge")  # Lval(w*, alpha)
+
+    output2_tensor = graph.cells[NUM_OF_CELLS - 1].output
     output2_tensor = output2_tensor.view(output2_tensor.shape[0], -1)
 
     if USE_CUDA:
@@ -841,13 +873,13 @@ if __name__ == "__main__":
         ltrain = train_NN(forward_pass_only=0)
         print("Finished train_NN()")
 
+        if VISUALIZER or DEBUG:
+            if run_num > 1:
+                break  # visualizer does not need more than a single run
+
         # 'train_or_val' to differentiate between using training dataset and validation dataset
         lval = train_architecture(forward_pass_only=0, train_or_val='val')
         print("Finished train_architecture()")
-
-        if VISUALIZER or DEBUG:
-            if run_num > 1:
-                break  # just for debugging
 
         print("lval = ", lval, " , ltrain = ", ltrain)
         not_converged = (lval > 0.01) or (ltrain > 0.01)
