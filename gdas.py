@@ -221,9 +221,12 @@ class Connection(nn.Module):
         # use linear transformation (weighted summation) to combine results from different edges
         self.combined_feature_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
                                                 requires_grad=False)
+        self.combined_edge_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
+                                             requires_grad=False)
 
         if USE_CUDA:
             self.combined_feature_map = self.combined_feature_map.cuda()
+            self.combined_edge_map = self.combined_edge_map.cuda()
 
         for e in range(NUM_OF_MIXED_OPS):
             with torch.no_grad():
@@ -730,7 +733,6 @@ def train_architecture(forward_pass_only, train_or_val='val'):
             # not all nodes have same number of Type-1 output connection
             for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
                 for e in range(NUM_OF_MIXED_OPS):
-                    x = 0  # depends on the input tensor dimension requirement
 
                     if c == 0:
                         if train_or_val == 'val':
@@ -741,11 +743,14 @@ def train_architecture(forward_pass_only, train_or_val='val'):
 
                     else:
                         # Uses feature map output from previous neighbour node for further processing
-                        x = graph.cells[c].nodes[n - 1].connections[cc].combined_feature_map
+                        x = graph.cells[c].nodes[n - 1].connections[cc].combined_edge_map
+
+                    if USE_CUDA:
+                        x = x.cuda()
 
                     # need to take care of tensors dimension mismatch
-                    graph.cells[c].nodes[n].connections[cc].combined_feature_map = \
-                        graph.cells[c].nodes[n].connections[cc].combined_feature_map + \
+                    graph.cells[c].nodes[n].connections[cc].combined_edge_map = \
+                        graph.cells[c].nodes[n].connections[cc].combined_edge_map + \
                         graph.cells[c].nodes[n].connections[cc].edges[e].forward(x, "edge")  # Lval(w*, alpha)
 
     output2_tensor = graph.cells[NUM_OF_CELLS - 1].output
