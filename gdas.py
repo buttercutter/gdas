@@ -14,7 +14,7 @@ import tensorflow as tf
 # import numpy as np
 
 VISUALIZER = 0
-DEBUG = 1
+DEBUG = 0
 logdir = 'runs/gdas_experiment_1'
 
 if VISUALIZER:
@@ -37,7 +37,7 @@ USE_CUDA = torch.cuda.is_available()
 
 # https://arxiv.org/pdf/1806.09055.pdf#page=12
 TEST_DATASET_RATIO = 0.5  # 50 percent of the dataset is dedicated for testing purpose
-BATCH_SIZE = 4
+BATCH_SIZE = 16
 NUM_OF_IMAGE_CHANNELS = 3  # RGB
 IMAGE_HEIGHT = 32
 IMAGE_WIDTH = 32
@@ -665,10 +665,10 @@ def train_NN(forward_pass_only):
             print("finished gradwalk()")
 
         optimizer1.step()
-        graph.reinit()
+        # graph.reinit()
 
     else:
-        graph.reinit()
+        # graph.reinit()
 
         # no need to save model parameters for next epoch
         return Ltrain
