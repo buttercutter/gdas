@@ -616,6 +616,9 @@ def train_NN(forward_pass_only):
             NN_input = NN_input.cuda()
             NN_train_labels = NN_train_labels.cuda()
 
+    # normalize inputs
+    NN_input = NN_input/255
+
     if forward_pass_only == 0:
         # zero the parameter gradients
         optimizer1.zero_grad()
@@ -725,6 +728,10 @@ def train_architecture(forward_pass_only, train_or_val='val'):
             val_inputs = val_inputs.cuda()
             val_labels = val_labels.cuda()
 
+    # normalize inputs
+    train_inputs = train_inputs/255
+    val_inputs = val_inputs/255
+    
     # forward pass
     # use linear transformation ('weighted sum then concat') to combine results from different nodes
     # into an output feature map to be fed into the next neighbour node for further processing
