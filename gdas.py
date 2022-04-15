@@ -47,6 +47,7 @@ SIZE_OF_HIDDEN_LAYERS = 64
 NUM_EPOCHS = 1
 LEARNING_RATE = 0.025
 MOMENTUM = 0.9
+DECAY_FACTOR = 0.1  # for keeping Ltrain within acceptable range
 NUM_OF_CELLS = 8
 NUM_OF_MIXED_OPS = 4
 NUM_OF_PREVIOUS_CELLS_OUTPUTS = 2  # last_cell_output , second_last_cell_output
@@ -252,7 +253,7 @@ class Connection(nn.Module):
         for e in range(NUM_OF_MIXED_OPS):
             edges_results = edges_results + self.edges[e].forward(x, types)
 
-        return edges_results
+        return edges_results * DECAY_FACTOR
 
 
 # to collect and manage multiple different connections between a particular node and its neighbouring nodes
@@ -301,7 +302,7 @@ class Node(nn.Module):
             # stores the addition result for next for loop index
             self.connections[cc].combined_feature_map = value
 
-        return value
+        return value * DECAY_FACTOR
 
 
 # to manage all nodes within a cell
@@ -616,6 +617,9 @@ def train_NN(forward_pass_only):
             NN_input = NN_input.cuda()
             NN_train_labels = NN_train_labels.cuda()
 
+    # normalize inputs
+    NN_input = NN_input/255
+
     if forward_pass_only == 0:
         # zero the parameter gradients
         optimizer1.zero_grad()
@@ -725,6 +729,10 @@ def train_architecture(forward_pass_only, train_or_val='val'):
             val_inputs = val_inputs.cuda()
             val_labels = val_labels.cuda()
 
+    # normalize inputs
+    train_inputs = train_inputs/255
+    val_inputs = val_inputs/255
+    
     # forward pass
     # use linear transformation ('weighted sum then concat') to combine results from different nodes
     # into an output feature map to be fed into the next neighbour node for further processing
