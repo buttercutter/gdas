@@ -47,7 +47,7 @@ SIZE_OF_HIDDEN_LAYERS = 64
 NUM_EPOCHS = 1
 LEARNING_RATE = 0.025
 MOMENTUM = 0.9
-DECAY_FACTOR = 0.1  # for keeping Ltrain within acceptable range
+DECAY_FACTOR = 0.001  # for keeping Ltrain within acceptable range
 NUM_OF_CELLS = 8
 NUM_OF_MIXED_OPS = 4
 NUM_OF_PREVIOUS_CELLS_OUTPUTS = 2  # last_cell_output , second_last_cell_output
@@ -246,12 +246,12 @@ class Connection(nn.Module):
     # Tensorboard visualization requires a generic forward() function
     def forward(self, x, types=None):
         edges_results = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
-                                    requires_grad=True)
+                                    requires_grad=False)
         if USE_CUDA:
             edges_results = edges_results.cuda()
 
         for e in range(NUM_OF_MIXED_OPS):
-            edges_results = edges_results + self.edges[e].forward(x, types)
+            edges_results = edges_results + self.edges[e].forward(x, types).detach().clone()
 
         return edges_results * DECAY_FACTOR
 
@@ -617,65 +617,66 @@ def train_NN(forward_pass_only):
             NN_input = NN_input.cuda()
             NN_train_labels = NN_train_labels.cuda()
 
-    # normalize inputs
-    NN_input = NN_input/255
+        # normalize inputs
+        NN_input = NN_input / 255
 
-    if forward_pass_only == 0:
-        # zero the parameter gradients
-        optimizer1.zero_grad()
+        if forward_pass_only == 0:
+            # zero the parameter gradients
+            optimizer1.zero_grad()
 
-        #  do train thing for internal NN function weights
-        NN_output = graph.forward(NN_input, types="f")
+            #  do train thing for internal NN function weights
+            NN_output = graph.forward(NN_input, types="f")
 
-    if VISUALIZER:
-        # netron https://docs.microsoft.com/zh-cn/windows/ai/windows-ml/tutorials/pytorch-convert-model
-        Convert_ONNX(graph, NN_input)
+        if VISUALIZER:
+            # netron https://docs.microsoft.com/zh-cn/windows/ai/windows-ml/tutorials/pytorch-convert-model
+            Convert_ONNX(graph, NN_input)
 
-        # tensorboard
-        writer.add_graph(graph, NN_input)
-        writer.close()
+            # tensorboard
+            writer.add_graph(graph, NN_input)
+            writer.close()
 
-        # graphviz
-        make_dot(NN_output.mean(), params=dict(graph.named_parameters())).render("gdas_torchviz", format="svg")
-
-    if DEBUG:
-        print("outputs1.size() = ", NN_output.size())
-        print("train_labels.size() = ", NN_train_labels.size())
-
-    Ltrain = criterion(NN_output, NN_train_labels)
-
-    if forward_pass_only == 0:
-        # backward pass
-        if DEBUG:
-            Ltrain = Ltrain.requires_grad_()
-
-            Ltrain.retain_grad()
-            Ltrain.register_hook(lambda x: print(x))
-
-        Ltrain.backward()
+            # graphviz
+            make_dot(NN_output.mean(), params=dict(graph.named_parameters())).render("gdas_torchviz", format="svg")
 
         if DEBUG:
-            print("starts to print graph.named_parameters()")
+            print("outputs1.size() = ", NN_output.size())
+            print("train_labels.size() = ", NN_train_labels.size())
 
-            for name, param in graph.named_parameters():
-                print(name, param.grad)
+        Ltrain = criterion(NN_output, NN_train_labels)
 
-            print("finished printing graph.named_parameters()")
+        if forward_pass_only == 0:
+            # backward pass
+            if DEBUG:
+                Ltrain = Ltrain.requires_grad_()
 
-            print("starts gradwalk()")
+                Ltrain.retain_grad()
+                Ltrain.register_hook(lambda x: print(x))
 
-            # gradwalk(Ltrain.grad_fn)
+            Ltrain.backward()
 
-            print("finished gradwalk()")
+            if DEBUG:
+                print("starts to print graph.named_parameters()")
 
-        optimizer1.step()
-        # graph.reinit()
+                for name, param in graph.named_parameters():
+                    print(name, param.grad)
 
-    else:
-        # graph.reinit()
+                print("finished printing graph.named_parameters()")
 
-        # no need to save model parameters for next epoch
-        return Ltrain
+                print("starts gradwalk()")
+
+                # gradwalk(Ltrain.grad_fn)
+
+                print("finished gradwalk()")
+
+            optimizer1.step()
+            # graph.reinit()
+
+        else:
+            # graph.reinit()
+
+            # no need to save model parameters for next epoch
+            return Ltrain
+
 
     # DARTS's approximate architecture gradient. Refer to equation (8)
     # needs to save intermediate trained model for Ltrain
@@ -729,81 +730,82 @@ def train_architecture(forward_pass_only, train_or_val='val'):
             val_inputs = val_inputs.cuda()
             val_labels = val_labels.cuda()
 
-    # normalize inputs
-    train_inputs = train_inputs/255
-    val_inputs = val_inputs/255
-    
-    # forward pass
-    # use linear transformation ('weighted sum then concat') to combine results from different nodes
-    # into an output feature map to be fed into the next neighbour node for further processing
-    for c in range(NUM_OF_CELLS):
-        for n in range(NUM_OF_NODES_IN_EACH_CELL):
-            # not all nodes have same number of Type-1 output connection
-            for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                for e in range(NUM_OF_MIXED_OPS):
+        # normalize inputs
+        train_inputs = train_inputs / 255
+        val_inputs = val_inputs / 255
 
-                    if c == 0:
-                        if train_or_val == 'val':
-                            x = val_inputs
+        # forward pass
+        # use linear transformation ('weighted sum then concat') to combine results from different nodes
+        # into an output feature map to be fed into the next neighbour node for further processing
+        for c in range(NUM_OF_CELLS):
+            for n in range(NUM_OF_NODES_IN_EACH_CELL):
+                # not all nodes have same number of Type-1 output connection
+                for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
+                    for e in range(NUM_OF_MIXED_OPS):
+
+                        if c == 0:
+                            if train_or_val == 'val':
+                                x = val_inputs
+
+                            else:
+                                x = train_inputs
 
                         else:
-                            x = train_inputs
+                            # Uses feature map output from previous neighbour node for further processing
+                            x = graph.cells[c].nodes[n - 1].connections[cc].combined_edge_map
 
-                    else:
-                        # Uses feature map output from previous neighbour node for further processing
-                        x = graph.cells[c].nodes[n - 1].connections[cc].combined_edge_map
+                        if USE_CUDA:
+                            x = x.cuda()
 
-                    if USE_CUDA:
-                        x = x.cuda()
+                        # need to take care of tensors dimension mismatch
+                        graph.cells[c].nodes[n].connections[cc].combined_edge_map = \
+                            graph.cells[c].nodes[n].connections[cc].combined_edge_map + \
+                            graph.cells[c].nodes[n].connections[cc].edges[e].forward(x, "edge")  # Lval(w*, alpha)
 
-                    # need to take care of tensors dimension mismatch
-                    graph.cells[c].nodes[n].connections[cc].combined_edge_map = \
-                        graph.cells[c].nodes[n].connections[cc].combined_edge_map + \
-                        graph.cells[c].nodes[n].connections[cc].edges[e].forward(x, "edge")  # Lval(w*, alpha)
+        output2_tensor = graph.cells[NUM_OF_CELLS - 1].output
+        output2_tensor = output2_tensor.view(output2_tensor.shape[0], -1)
 
-    output2_tensor = graph.cells[NUM_OF_CELLS - 1].output
-    output2_tensor = output2_tensor.view(output2_tensor.shape[0], -1)
+        if USE_CUDA:
+            output2_tensor = output2_tensor.cuda()
 
-    if USE_CUDA:
-        output2_tensor = output2_tensor.cuda()
+        if USE_CUDA:
+            m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES).cuda()
 
-    if USE_CUDA:
-        m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES).cuda()
+        else:
+            m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
 
-    else:
-        m_linear = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
+        outputs2 = m_linear(output2_tensor)
 
-    outputs2 = m_linear(output2_tensor)
-
-    if USE_CUDA:
-        outputs2 = outputs2.cuda()
-
-    if DEBUG:
-        print("outputs2.size() = ", outputs2.size())
-        print("val_labels.size() = ", val_labels.size())
-        print("train_labels.size() = ", train_labels.size())
-
-    if train_or_val == 'val':
-        loss = criterion(outputs2, val_labels)
-
-    else:
-        loss = criterion(outputs2, train_labels)
-
-    if forward_pass_only == 0:
-        # backward pass
-        Lval = loss
-        Lval = Lval.requires_grad_()
-        Lval.backward()
+        if USE_CUDA:
+            outputs2 = outputs2.cuda()
 
         if DEBUG:
-            for name, param in graph.named_parameters():
-                print(name, param.grad)
+            print("outputs2.size() = ", outputs2.size())
+            print("val_labels.size() = ", val_labels.size())
+            print("train_labels.size() = ", train_labels.size())
 
-        optimizer2.step()
+        if train_or_val == 'val':
+            loss = criterion(outputs2, val_labels)
 
-    else:
-        # no need to save model parameters for next epoch
-        return loss
+        else:
+            loss = criterion(outputs2, train_labels)
+
+        if forward_pass_only == 0:
+            # backward pass
+            Lval = loss
+            Lval = Lval.requires_grad_()
+            Lval.backward()
+
+            if DEBUG:
+                for name, param in graph.named_parameters():
+                    print(name, param.grad)
+
+            optimizer2.step()
+
+        else:
+            # no need to save model parameters for next epoch
+            return loss
+
 
     # needs to save intermediate trained model for Lval
     path = './model.pth'
