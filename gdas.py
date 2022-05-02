@@ -444,6 +444,8 @@ class Graph(nn.Module):
 
         self.linears = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
 
+        self.softmax = nn.Softmax(1)
+
     def reinit(self):
         # See https://discuss.pytorch.org/t/tensorboard-issue-with-self-defined-forward-function/140628/20?u=promach
         for c in range(NUM_OF_CELLS):
@@ -529,6 +531,8 @@ class Graph(nn.Module):
 
         else:
             outputs1 = self.linears(output_tensor)
+            
+	outputs1 = self.softmax(outputs1)
 
         if USE_CUDA:
             outputs1 = outputs1.cuda()
