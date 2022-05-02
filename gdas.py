@@ -155,6 +155,10 @@ class ConvEdge(Edge):
         super().__init__()
         self.f = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(3, 3), stride=(stride, stride), padding=1)
 
+        # Kaiming He weight Initialization
+        # https://medium.com/@shoray.goel/kaiming-he-initialization-a8d9ed0b5899
+        nn.init.kaiming_uniform_(self.f.weight, mode='fan_in', nonlinearity='relu')
+        
 
 # class LinearEdge(Edge):
 #    def __init__(self):
@@ -440,6 +444,8 @@ class Graph(nn.Module):
 
         self.linears = nn.Linear(NUM_OF_IMAGE_CHANNELS * IMAGE_HEIGHT * IMAGE_WIDTH, NUM_OF_IMAGE_CLASSES)
 
+        self.softmax = nn.Softmax(1)
+
     def reinit(self):
         # See https://discuss.pytorch.org/t/tensorboard-issue-with-self-defined-forward-function/140628/20?u=promach
         for c in range(NUM_OF_CELLS):
@@ -525,6 +531,8 @@ class Graph(nn.Module):
 
         else:
             outputs1 = self.linears(output_tensor)
+            
+	outputs1 = self.softmax(outputs1)
 
         if USE_CUDA:
             outputs1 = outputs1.cuda()
