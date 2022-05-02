@@ -155,6 +155,10 @@ class ConvEdge(Edge):
         super().__init__()
         self.f = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(3, 3), stride=(stride, stride), padding=1)
 
+        # Kaiming He weight Initialization
+        # https://medium.com/@shoray.goel/kaiming-he-initialization-a8d9ed0b5899
+        nn.init.kaiming_uniform_(self.f.weight, mode='fan_in', nonlinearity='relu')
+        
 
 # class LinearEdge(Edge):
 #    def __init__(self):
