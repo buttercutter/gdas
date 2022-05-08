@@ -255,7 +255,7 @@ class Connection(nn.Module):
             edges_results = edges_results.cuda()
 
         for e in range(NUM_OF_MIXED_OPS):
-            edges_results = edges_results + self.edges[e].forward(x, types).detach().clone()
+            edges_results = edges_results + self.edges[e].forward(x, types)
 
         return edges_results * DECAY_FACTOR
 
@@ -651,16 +651,15 @@ def train_NN(forward_pass_only):
             print("train_labels.size() = ", NN_train_labels.size())
 
         Ltrain = criterion(NN_output, NN_train_labels)
+        Ltrain = Ltrain.requires_grad_()
+        Ltrain.retain_grad()
 
         if forward_pass_only == 0:
             # backward pass
             if DEBUG:
-                Ltrain = Ltrain.requires_grad_()
-
-                Ltrain.retain_grad()
                 Ltrain.register_hook(lambda x: print(x))
 
-            Ltrain.backward()
+            Ltrain.backward(retain_graph=True)
 
             if DEBUG:
                 print("starts to print graph.named_parameters()")
@@ -793,16 +792,17 @@ def train_architecture(forward_pass_only, train_or_val='val'):
             print("train_labels.size() = ", train_labels.size())
 
         if train_or_val == 'val':
-            loss = criterion(outputs2, val_labels)
+            Lval = criterion(outputs2, val_labels)
 
         else:
-            loss = criterion(outputs2, train_labels)
+            Lval = criterion(outputs2, train_labels)
+
+        Lval = Lval.requires_grad_()
+        Lval.retain_grad()
 
         if forward_pass_only == 0:
             # backward pass
-            Lval = loss
-            Lval = Lval.requires_grad_()
-            Lval.backward()
+            Lval.backward(retain_graph=True)
 
             if DEBUG:
                 for name, param in graph.named_parameters():
@@ -812,8 +812,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
 
         else:
             # no need to save model parameters for next epoch
-            return loss
-
+            return Lval
 
     # needs to save intermediate trained model for Lval
     path = './model.pth'
