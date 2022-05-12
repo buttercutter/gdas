@@ -378,22 +378,14 @@ class Cell(nn.Module):
                             self.nodes[n].forward(y, node_num=n, types=types)  # Ltrain(w±, alpha)
 
                     # Uses feature map output from previous neighbour cells for further processing
-                    y1 = self.nodes[NUM_OF_NODES_IN_EACH_CELL - 1].forward(x1, node_num=n, types=types)
-                    y2 = self.nodes[NUM_OF_NODES_IN_EACH_CELL - 1].forward(x2, node_num=n, types=types)
-
-                    # combines all the feature maps from different mixed ops edges
                     self.nodes[n].output = self.nodes[n].output + \
-                        self.nodes[n].forward(y1 + y2, node_num=n, types=types)  # Ltrain(w±, alpha)
+                        self.nodes[n].forward(x1 + x2, node_num=n, types=types)  # Ltrain(w±, alpha)
 
             else:
                 if n == 0:
                     # Uses feature map output from previous neighbour cells for further processing
-                    y1 = self.nodes[NUM_OF_NODES_IN_EACH_CELL - 1].forward(x1, node_num=n, types=types)
-                    y2 = self.nodes[NUM_OF_NODES_IN_EACH_CELL - 1].forward(x2, node_num=n, types=types)
-
-                    # combines all the feature maps from different mixed ops edges
                     self.nodes[n].output = \
-                        self.nodes[n].forward(y1 + y2, node_num=n, types=types)  # Ltrain(w±, alpha)
+                        self.nodes[n].forward(x1 + x2, node_num=n, types=types)  # Ltrain(w±, alpha)
 
                 else:
                     # Uses feature map output from previous neighbour nodes for further processing
@@ -408,12 +400,8 @@ class Cell(nn.Module):
                             self.nodes[n].forward(y, node_num=n, types=types)  # Ltrain(w±, alpha)
 
                     # Uses feature map output from previous neighbour cells for further processing
-                    y1 = self.nodes[NUM_OF_NODES_IN_EACH_CELL - 1].forward(x1, node_num=n, types=types)
-                    y2 = self.nodes[NUM_OF_NODES_IN_EACH_CELL - 1].forward(x2, node_num=n, types=types)
-
-                    # combines all the feature maps from different mixed ops edges
                     self.nodes[n].output = self.nodes[n].output + \
-                        self.nodes[n].forward(y1 + y2, node_num=n, types=types)  # Ltrain(w±, alpha)
+                        self.nodes[n].forward(x1 + x2, node_num=n, types=types)  # Ltrain(w±, alpha)
 
             # 'add' then 'concat' feature maps from different nodes
             # needs to take care of tensor dimension mismatch
