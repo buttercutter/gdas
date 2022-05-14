@@ -376,10 +376,6 @@ class Cell(nn.Module):
                         self.nodes[n].output = self.nodes[n].output + \
                             self.nodes[n].forward(x, node_num=n, types=types)  # Ltrain(w±, alpha)
 
-                    # Uses feature map output from previous neighbour cells for further processing
-                    self.nodes[n].output = self.nodes[n].output + \
-                        self.nodes[n].forward(x1 + x2, node_num=n, types=types)  # Ltrain(w±, alpha)
-
             else:
                 if n == 0:
                     # Uses feature map output from previous neighbour cells for further processing
