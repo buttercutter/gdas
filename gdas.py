@@ -371,11 +371,10 @@ class Cell(nn.Module):
                         # nodes[ni] for previous nodes only
                         # connections[n-1] for neighbour nodes only
                         x = self.nodes[ni].connections[n-1].combined_feature_map
-                        y = self.nodes[ni].forward(x, node_num=n, types=types)  # Ltrain(w±, alpha)
 
                         # combines all the feature maps from different mixed ops edges
                         self.nodes[n].output = self.nodes[n].output + \
-                            self.nodes[n].forward(y, node_num=n, types=types)  # Ltrain(w±, alpha)
+                            self.nodes[n].forward(x, node_num=n, types=types)  # Ltrain(w±, alpha)
 
                     # Uses feature map output from previous neighbour cells for further processing
                     self.nodes[n].output = self.nodes[n].output + \
@@ -393,11 +392,10 @@ class Cell(nn.Module):
                         # nodes[ni] for previous nodes only
                         # connections[n-1] for neighbour nodes only
                         x = self.nodes[ni].connections[n-1].combined_feature_map
-                        y = self.nodes[ni].forward(x, node_num=n, types=types)  # Ltrain(w±, alpha)
 
                         # combines all the feature maps from different mixed ops edges
                         self.nodes[n].output = self.nodes[n].output + \
-                            self.nodes[n].forward(y, node_num=n, types=types)  # Ltrain(w±, alpha)
+                            self.nodes[n].forward(x, node_num=n, types=types)  # Ltrain(w±, alpha)
 
                     # Uses feature map output from previous neighbour cells for further processing
                     self.nodes[n].output = self.nodes[n].output + \
