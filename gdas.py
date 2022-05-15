@@ -380,7 +380,8 @@ class Cell(nn.Module):
                 if n == 0:
                     # Uses feature map output from previous neighbour cells for further processing
                     self.nodes[n].output = \
-                        self.nodes[n].forward(x1 + x2, node_num=n, types=types)  # Ltrain(w±, alpha)
+                        self.nodes[n].forward(x1, node_num=n, types=types) + \
+                        self.nodes[n].forward(x2, node_num=n, types=types)  # Ltrain(w±, alpha)
 
                 else:
                     # Uses feature map output from previous neighbour nodes for further processing
@@ -395,7 +396,8 @@ class Cell(nn.Module):
 
                     # Uses feature map output from previous neighbour cells for further processing
                     self.nodes[n].output = self.nodes[n].output + \
-                        self.nodes[n].forward(x1 + x2, node_num=n, types=types)  # Ltrain(w±, alpha)
+                        self.nodes[n].forward(x1, node_num=n, types=types) + \
+                        self.nodes[n].forward(x2, node_num=n, types=types)  # Ltrain(w±, alpha)
 
             # 'add' then 'concat' feature maps from different nodes
             # needs to take care of tensor dimension mismatch
