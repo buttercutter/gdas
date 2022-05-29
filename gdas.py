@@ -255,7 +255,8 @@ class Connection(nn.Module):
             edges_results = edges_results.cuda()
 
         for e in range(NUM_OF_MIXED_OPS):
-            edges_results = edges_results + self.edges[e].forward(x, types)
+	    with torch.no_grad():
+            	edges_results = edges_results + self.edges[e].forward(x, types)
 
         return edges_results * DECAY_FACTOR
 
