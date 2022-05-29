@@ -255,7 +255,8 @@ class Connection(nn.Module):
             edges_results = edges_results.cuda()
 
         for e in range(NUM_OF_MIXED_OPS):
-            edges_results = edges_results + self.edges[e].forward(x, types)
+	    with torch.no_grad():
+            	edges_results = edges_results + self.edges[e].forward(x, types)
 
         return edges_results * DECAY_FACTOR
 
@@ -369,8 +370,8 @@ class Cell(nn.Module):
                     # Uses feature map output from previous neighbour nodes for further processing
                     for ni in range(n):
                         # nodes[ni] for previous nodes only
-                        # connections[n-1] for neighbour nodes only
-                        x = self.nodes[ni].connections[n-1].combined_feature_map
+                        # connections[n-ni-1] for neighbour nodes only
+                        x = self.nodes[ni].connections[n-ni-1].combined_feature_map
 
                         # combines all the feature maps from different mixed ops edges
                         self.nodes[n].output = self.nodes[n].output + \
@@ -387,8 +388,8 @@ class Cell(nn.Module):
                     # Uses feature map output from previous neighbour nodes for further processing
                     for ni in range(n):
                         # nodes[ni] for previous nodes only
-                        # connections[n-1] for neighbour nodes only
-                        x = self.nodes[ni].connections[n-1].combined_feature_map
+                        # connections[n-ni-1] for neighbour nodes only
+                        x = self.nodes[ni].connections[n-ni-1].combined_feature_map
 
                         # combines all the feature maps from different mixed ops edges
                         self.nodes[n].output = self.nodes[n].output + \
