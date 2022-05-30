@@ -50,6 +50,7 @@ MOMENTUM = 0.9
 DECAY_FACTOR = 0.001  # for keeping Ltrain within acceptable range
 NUM_OF_CELLS = 8
 NUM_OF_MIXED_OPS = 4
+MIXED_OPS_TENSOR_SHAPE = 4  # shape of the computational kernel used inside each mixed ops
 NUM_OF_PREVIOUS_CELLS_OUTPUTS = 2  # last_cell_output , second_last_cell_output
 NUM_OF_NODES_IN_EACH_CELL = 5  # including the last node that combines the output from all 4 previous nodes
 MAX_NUM_OF_CONNECTIONS_PER_NODE = NUM_OF_NODES_IN_EACH_CELL
@@ -95,6 +96,12 @@ class Edge(nn.Module):
         # https://pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html
         self.weights = nn.Parameter(torch.zeros(1),
                                     requires_grad=True)  # for edge weights, not for internal NN function weights
+
+        # for approximate architecture gradient
+        self.f_weights = torch.zeros(MIXED_OPS_TENSOR_SHAPE, requires_grad=True)
+        self.f_weights_backup = torch.zeros(MIXED_OPS_TENSOR_SHAPE, requires_grad=True)
+        self.weight_plus = torch.zeros(MIXED_OPS_TENSOR_SHAPE, requires_grad=True)
+        self.weight_minus = torch.zeros(MIXED_OPS_TENSOR_SHAPE, requires_grad=True)
 
     def __freeze_w(self):
         self.weights.requires_grad = False
@@ -216,12 +223,6 @@ class Connection(nn.Module):
         self.edge_weights = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
         # self.edges_results = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
         #                                  requires_grad=False)
-
-        # for approximate architecture gradient
-        self.f_weights = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
-        self.f_weights_backup = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
-        self.weight_plus = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
-        self.weight_minus = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
 
         # use linear transformation (weighted summation) to combine results from different edges
         self.combined_feature_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
@@ -816,28 +817,28 @@ def train_architecture(forward_pass_only, train_or_val='val'):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # not all nodes have same number of Type-1 output connection
             for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                CC = graph.cells[c].nodes[n].connections[cc]
-
                 for e in range(NUM_OF_MIXED_OPS):
+                    EE = graph.cells[c].nodes[n].connections[cc].edges[e]
+
                     for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
                         # https://mythrex.github.io/math_behind_darts/
                         # Finite Difference Method
-                        CC.weight_plus = w + epsilon * Lval
-                        CC.weight_minus = w - epsilon * Lval
+                        EE.weight_plus = w + epsilon * Lval
+                        EE.weight_minus = w - epsilon * Lval
 
                         # Backups original f_weights
-                        CC.f_weights_backup = w
+                        EE.f_weights_backup = w
 
     # replaces f_weights with weight_plus before NN training
     for c in range(NUM_OF_CELLS):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # not all nodes have same number of Type-1 output connection
             for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                CC = graph.cells[c].nodes[n].connections[cc]
-
                 for e in range(NUM_OF_MIXED_OPS):
+                    EE = graph.cells[c].nodes[n].connections[cc].edges[e]
+
                     for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
-                        w = CC.weight_plus
+                        w = EE.weight_plus
 
     # test NN to obtain loss
     Ltrain_plus = train_architecture(forward_pass_only=1, train_or_val='train')
@@ -847,11 +848,11 @@ def train_architecture(forward_pass_only, train_or_val='val'):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # not all nodes have same number of Type-1 output connection
             for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                CC = graph.cells[c].nodes[n].connections[cc]
-
                 for e in range(NUM_OF_MIXED_OPS):
+                    EE = graph.cells[c].nodes[n].connections[cc].edges[e]
+
                     for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
-                        w = CC.weight_minus
+                        w = EE.weight_minus
 
     # test NN to obtain loss
     Ltrain_minus = train_architecture(forward_pass_only=1, train_or_val='train')
@@ -861,11 +862,11 @@ def train_architecture(forward_pass_only, train_or_val='val'):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # not all nodes have same number of Type-1 output connection
             for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                CC = graph.cells[c].nodes[n].connections[cc]
-
                 for e in range(NUM_OF_MIXED_OPS):
+                    EE = graph.cells[c].nodes[n].connections[cc].edges[e]
+
                     for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
-                        w = CC.f_weights_backup
+                        w = EE.f_weights_backup
 
     if DEBUG:
         print("after multiple for-loops")
