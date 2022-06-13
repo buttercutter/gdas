@@ -47,9 +47,10 @@ SIZE_OF_HIDDEN_LAYERS = 64
 NUM_EPOCHS = 1
 LEARNING_RATE = 0.025
 MOMENTUM = 0.9
-DECAY_FACTOR = 0.001  # for keeping Ltrain within acceptable range
+DECAY_FACTOR = 0.0001  # for keeping Ltrain and Lval within acceptable range
 NUM_OF_CELLS = 8
 NUM_OF_MIXED_OPS = 4
+MIXED_OPS_TENSOR_SHAPE = 4  # shape of the computational kernel used inside each mixed ops
 NUM_OF_PREVIOUS_CELLS_OUTPUTS = 2  # last_cell_output , second_last_cell_output
 NUM_OF_NODES_IN_EACH_CELL = 5  # including the last node that combines the output from all 4 previous nodes
 MAX_NUM_OF_CONNECTIONS_PER_NODE = NUM_OF_NODES_IN_EACH_CELL
@@ -95,6 +96,12 @@ class Edge(nn.Module):
         # https://pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html
         self.weights = nn.Parameter(torch.zeros(1),
                                     requires_grad=True)  # for edge weights, not for internal NN function weights
+
+        # for approximate architecture gradient
+        self.f_weights = torch.zeros(MIXED_OPS_TENSOR_SHAPE, requires_grad=True)
+        self.f_weights_backup = torch.zeros(MIXED_OPS_TENSOR_SHAPE, requires_grad=True)
+        self.weight_plus = torch.zeros(MIXED_OPS_TENSOR_SHAPE, requires_grad=True)
+        self.weight_minus = torch.zeros(MIXED_OPS_TENSOR_SHAPE, requires_grad=True)
 
     def __freeze_w(self):
         self.weights.requires_grad = False
@@ -217,12 +224,6 @@ class Connection(nn.Module):
         # self.edges_results = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
         #                                  requires_grad=False)
 
-        # for approximate architecture gradient
-        self.f_weights = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
-        self.f_weights_backup = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
-        self.weight_plus = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
-        self.weight_minus = torch.zeros(NUM_OF_MIXED_OPS, requires_grad=True)
-
         # use linear transformation (weighted summation) to combine results from different edges
         self.combined_feature_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
                                                 requires_grad=False)
@@ -243,8 +244,12 @@ class Connection(nn.Module):
     def reinit(self):
         self.combined_feature_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
                                                 requires_grad=False)
+        self.combined_edge_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
+                                                requires_grad=False)
+
         if USE_CUDA:
             self.combined_feature_map = self.combined_feature_map.cuda()
+            self.combined_edge_map = self.combined_edge_map.cuda()
 
     # See https://www.reddit.com/r/pytorch/comments/rtlvtk/tensorboard_issue_with_selfdefined_forward/
     # Tensorboard visualization requires a generic forward() function
@@ -299,18 +304,26 @@ class Node(nn.Module):
 
             # tensorflow does not like the use of self.variable inside def forward() unlike in Pytorch.
             # Tensorflow prefers the use of a new intermediate variable instead of self.variable
-            value = self.connections[cc].combined_feature_map
+            if types == "f":
+                value = self.connections[cc].combined_feature_map
+
+            else:  # "edge"
+                value = self.connections[cc].combined_edge_map
 
             # combines all the feature maps from different mixed ops edges
             value = value + y  # Ltrain(w±, alpha)
 
             # stores the addition result for next for loop index
-            self.connections[cc].combined_feature_map = value
+            if types == "f":
+                self.connections[cc].combined_feature_map = value
 
-	decayed_value = value * DECAY_FACTOR
+            else:  # "edge"
+                self.connections[cc].combined_edge_map = value
 
-	if USE_CUDA:
-	    decayed_value = decayed_value.cuda()
+        decayed_value = value * DECAY_FACTOR
+
+        if USE_CUDA:
+            decayed_value = decayed_value.cuda()
 
         return decayed_value
 
@@ -371,7 +384,11 @@ class Cell(nn.Module):
                     for ni in range(n):
                         # nodes[ni] for previous nodes only
                         # connections[n-ni-1] for neighbour nodes only
-                        x = self.nodes[ni].connections[n-ni-1].combined_feature_map
+                        if types == "f":
+                            x = self.nodes[ni].connections[n-ni-1].combined_feature_map
+
+                        else:  # "edge"
+                            x = self.nodes[ni].connections[n-ni-1].combined_edge_map
 
                         # combines all the feature maps from different mixed ops edges
                         self.nodes[n].output = self.nodes[n].output + \
@@ -389,7 +406,11 @@ class Cell(nn.Module):
                     for ni in range(n):
                         # nodes[ni] for previous nodes only
                         # connections[n-ni-1] for neighbour nodes only
-                        x = self.nodes[ni].connections[n-ni-1].combined_feature_map
+                        if types == "f":
+                            x = self.nodes[ni].connections[n-ni-1].combined_feature_map
+
+                        else:  # "edge"
+                            x = self.nodes[ni].connections[n-ni-1].combined_edge_map
 
                         # combines all the feature maps from different mixed ops edges
                         self.nodes[n].output = self.nodes[n].output + \
@@ -732,35 +753,16 @@ def train_architecture(forward_pass_only, train_or_val='val'):
         val_inputs = val_inputs / 255
 
         # forward pass
-        # use linear transformation ('weighted sum then concat') to combine results from different nodes
-        # into an output feature map to be fed into the next neighbour node for further processing
-        for c in range(NUM_OF_CELLS):
-            for n in range(NUM_OF_NODES_IN_EACH_CELL):
-                # not all nodes have same number of Type-1 output connection
-                for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                    for e in range(NUM_OF_MIXED_OPS):
+        if train_or_val == 'val':
+            graph.forward(val_inputs, types="edge")  # Lval(w*, alpha)
 
-                        if c == 0:
-                            if train_or_val == 'val':
-                                x = val_inputs
-
-                            else:
-                                x = train_inputs
-
-                        else:
-                            # Uses feature map output from previous neighbour node for further processing
-                            x = graph.cells[c].nodes[n - 1].connections[cc].combined_edge_map
-
-                        if USE_CUDA:
-                            x = x.cuda()
-
-                        # need to take care of tensors dimension mismatch
-                        graph.cells[c].nodes[n].connections[cc].combined_edge_map = \
-                            graph.cells[c].nodes[n].connections[cc].combined_edge_map + \
-                            graph.cells[c].nodes[n].connections[cc].edges[e].forward(x, "edge")  # Lval(w*, alpha)
+        else:
+            graph.forward(train_inputs, types="edge")  # Lval(w*, alpha)
 
         output2_tensor = graph.cells[NUM_OF_CELLS - 1].output
         output2_tensor = output2_tensor.view(output2_tensor.shape[0], -1)
+
+	output2_tensor = output2_tensor * DECAY_FACTOR
 
         if USE_CUDA:
             output2_tensor = output2_tensor.cuda()
@@ -812,32 +814,16 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     sigma = LEARNING_RATE
     epsilon = 0.01 / torch.norm(Lval)
 
-    for c in range(NUM_OF_CELLS):
-        for n in range(NUM_OF_NODES_IN_EACH_CELL):
-            # not all nodes have same number of Type-1 output connection
-            for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                CC = graph.cells[c].nodes[n].connections[cc]
-
-                for e in range(NUM_OF_MIXED_OPS):
-                    for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
-                        # https://mythrex.github.io/math_behind_darts/
-                        # Finite Difference Method
-                        CC.weight_plus = w + epsilon * Lval
-                        CC.weight_minus = w - epsilon * Lval
-
-                        # Backups original f_weights
-                        CC.f_weights_backup = w
-
     # replaces f_weights with weight_plus before NN training
     for c in range(NUM_OF_CELLS):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # not all nodes have same number of Type-1 output connection
             for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                CC = graph.cells[c].nodes[n].connections[cc]
-
                 for e in range(NUM_OF_MIXED_OPS):
+                    EE = graph.cells[c].nodes[n].connections[cc].edges[e]
+
                     for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
-                        w = CC.weight_plus
+                        w = w + epsilon * Lval
 
     # test NN to obtain loss
     Ltrain_plus = train_architecture(forward_pass_only=1, train_or_val='train')
@@ -847,11 +833,11 @@ def train_architecture(forward_pass_only, train_or_val='val'):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # not all nodes have same number of Type-1 output connection
             for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                CC = graph.cells[c].nodes[n].connections[cc]
-
                 for e in range(NUM_OF_MIXED_OPS):
+                    EE = graph.cells[c].nodes[n].connections[cc].edges[e]
+
                     for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
-                        w = CC.weight_minus
+                        w = w - 2 * epsilon * Lval
 
     # test NN to obtain loss
     Ltrain_minus = train_architecture(forward_pass_only=1, train_or_val='train')
@@ -861,11 +847,11 @@ def train_architecture(forward_pass_only, train_or_val='val'):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
             # not all nodes have same number of Type-1 output connection
             for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                CC = graph.cells[c].nodes[n].connections[cc]
-
                 for e in range(NUM_OF_MIXED_OPS):
+                    EE = graph.cells[c].nodes[n].connections[cc].edges[e]
+
                     for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
-                        w = CC.f_weights_backup
+                        w = w + epsilon * Lval
 
     if DEBUG:
         print("after multiple for-loops")
