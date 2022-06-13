@@ -814,22 +814,6 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     sigma = LEARNING_RATE
     epsilon = 0.01 / torch.norm(Lval)
 
-    for c in range(NUM_OF_CELLS):
-        for n in range(NUM_OF_NODES_IN_EACH_CELL):
-            # not all nodes have same number of Type-1 output connection
-            for cc in range(MAX_NUM_OF_CONNECTIONS_PER_NODE - n - 1):
-                for e in range(NUM_OF_MIXED_OPS):
-                    EE = graph.cells[c].nodes[n].connections[cc].edges[e]
-
-                    for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
-                        # https://mythrex.github.io/math_behind_darts/
-                        # Finite Difference Method
-                        EE.weight_plus = w + epsilon * Lval
-                        EE.weight_minus = w - epsilon * Lval
-
-                        # Backups original f_weights
-                        EE.f_weights_backup = w
-
     # replaces f_weights with weight_plus before NN training
     for c in range(NUM_OF_CELLS):
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
@@ -839,7 +823,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                     EE = graph.cells[c].nodes[n].connections[cc].edges[e]
 
                     for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
-                        w = EE.weight_plus
+                        w = w + epsilon * Lval
 
     # test NN to obtain loss
     Ltrain_plus = train_architecture(forward_pass_only=1, train_or_val='train')
@@ -853,7 +837,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                     EE = graph.cells[c].nodes[n].connections[cc].edges[e]
 
                     for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
-                        w = EE.weight_minus
+                        w = w - 2 * epsilon * Lval
 
     # test NN to obtain loss
     Ltrain_minus = train_architecture(forward_pass_only=1, train_or_val='train')
@@ -867,7 +851,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                     EE = graph.cells[c].nodes[n].connections[cc].edges[e]
 
                     for w in graph.cells[c].nodes[n].connections[cc].edges[e].f.parameters():
-                        w = EE.f_weights_backup
+                        w = w + epsilon * Lval
 
     if DEBUG:
         print("after multiple for-loops")
