@@ -457,6 +457,8 @@ class Graph(nn.Module):
 
         self.softmax = nn.Softmax(1)
 
+	self.Lval_backup = 0
+
     def reinit(self):
         # See https://discuss.pytorch.org/t/tensorboard-issue-with-self-defined-forward-function/140628/20?u=promach
         for c in range(NUM_OF_CELLS):
@@ -796,6 +798,9 @@ def train_architecture(forward_pass_only, train_or_val='val'):
             # backward pass
             Lval.backward(retain_graph=True)
 
+	    # stores a copy of Lval for later usage
+	    graph.Lval_backup = Lval
+
             if DEBUG:
                 for name, param in graph.named_parameters():
                     print(name, param.grad)
@@ -857,6 +862,9 @@ def train_architecture(forward_pass_only, train_or_val='val'):
         print("after multiple for-loops")
 
     L2train_Lval = (Ltrain_plus - Ltrain_minus) / (2 * epsilon)
+
+    # Lval is overwritten by function calls to train_architecture() of Ltrain_plus and Ltrain_minus
+    Lval = graph.Lval_backup
 
     return Lval - L2train_Lval
 
