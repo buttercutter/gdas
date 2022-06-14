@@ -866,7 +866,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     # Lval is overwritten by function calls to train_architecture() of Ltrain_plus and Ltrain_minus
     Lval = graph.Lval_backup
 
-    return Lval - L2train_Lval
+    return Lval - sigma * L2train_Lval
 
 
 if __name__ == "__main__":
