@@ -457,6 +457,11 @@ class Graph(nn.Module):
 
         self.softmax = nn.Softmax(1)
 
+	self.Lval_backup = torch.FloatTensor(0)
+
+	if USE_CUDA:
+	    self.Lval_backup = self.Lval_backup.cuda()
+
     def reinit(self):
         # See https://discuss.pytorch.org/t/tensorboard-issue-with-self-defined-forward-function/140628/20?u=promach
         for c in range(NUM_OF_CELLS):
@@ -796,6 +801,9 @@ def train_architecture(forward_pass_only, train_or_val='val'):
             # backward pass
             Lval.backward(retain_graph=True)
 
+	    # stores a copy of Lval for later usage
+	    graph.Lval_backup = Lval
+
             if DEBUG:
                 for name, param in graph.named_parameters():
                     print(name, param.grad)
@@ -809,6 +817,9 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     # needs to save intermediate trained model for Lval
     path = './model.pth'
     torch.save(graph, path)
+
+    # Lval is overwritten by function calls to train_architecture() of Ltrain_plus and Ltrain_minus
+    Lval = graph.Lval_backup
 
     # DARTS's approximate architecture gradient. Refer to equation (8) and https://i.imgur.com/81JFaWc.png
     sigma = LEARNING_RATE
@@ -858,7 +869,7 @@ def train_architecture(forward_pass_only, train_or_val='val'):
 
     L2train_Lval = (Ltrain_plus - Ltrain_minus) / (2 * epsilon)
 
-    return Lval - L2train_Lval
+    return Lval - sigma * L2train_Lval
 
 
 if __name__ == "__main__":
