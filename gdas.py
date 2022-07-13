@@ -936,7 +936,7 @@ if __name__ == "__main__":
         # 1) Distributed model
         # 2) Distributed data loader
         # 3) DeepSpeed optimizer
-        model_engine_, optimizer, trainloader, __ = deepspeed.initialize(args=args_, model=graph_, model_parameters=parameters, training_data=trainset)
+        model_engine_, optimizer, trainloader, __ = deepspeed.initialize(args=args_, model=graph_, model_parameters=parameters, training_data=trainset, config_params='./ds_config.json')
 
     else:
         model_engine_ = None
