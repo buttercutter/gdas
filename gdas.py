@@ -160,7 +160,7 @@ class Edge(nn.Module):
             y_hat = self.forward_f(x)
 
         elif types == "edge":
-	    y_hat.requires_grad_()
+            y_hat.requires_grad_()
             y_hat = self.forward_edge(x)
 
         return y_hat
@@ -269,13 +269,13 @@ class Connection(nn.Module):
             edges_results = edges_results.cuda()
 
         for e in range(NUM_OF_MIXED_OPS):
-	    if types == "edge":
-		edges_results.requires_grad_()    
-              	edges_results = edges_results + self.edges[e].forward(x, types)
+            if types == "edge":
+                edges_results.requires_grad_()
+                edges_results = edges_results + self.edges[e].forward(x, types)
 
-	    else:
+            else:
             	with torch.no_grad():
-		    edges_results = edges_results + self.edges[e].forward(x, types)
+                    edges_results = edges_results + self.edges[e].forward(x, types)
 
         return edges_results * DECAY_FACTOR
 
@@ -322,7 +322,7 @@ class Node(nn.Module):
                 value = self.connections[cc].combined_feature_map
 
             else:  # "edge"
-		value.requires_grad_()
+                value.requires_grad_()
                 value = self.connections[cc].combined_edge_map
 
             # combines all the feature maps from different mixed ops edges
@@ -381,13 +381,13 @@ class Cell(nn.Module):
         value = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
                             requires_grad=False)
 
-	if types == "edge":
-	    value.requires_grad_()
-	    self.output.requires_grad_()
+        if types == "edge":
+            value.requires_grad_()
+            self.output.requires_grad_()
 
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
-	    if types == "edge":
-	        self.nodes[n].output.requires_grad_()
+            if types == "edge":
+                self.nodes[n].output.requires_grad_()
 
             if c <= 1:
                 if n == 0:
@@ -479,10 +479,10 @@ class Graph(nn.Module):
 
         self.softmax = nn.Softmax(1)
 
-	self.Lval_backup = torch.FloatTensor(0)
+        self.Lval_backup = torch.FloatTensor(0)
 
-	if USE_CUDA:
-	    self.Lval_backup = self.Lval_backup.cuda()
+        if USE_CUDA:
+            self.Lval_backup = self.Lval_backup.cuda()
 
     def reinit(self):
         # See https://discuss.pytorch.org/t/tensorboard-issue-with-self-defined-forward-function/140628/20?u=promach
@@ -568,7 +568,7 @@ class Graph(nn.Module):
         else:
             outputs1 = self.linears(output_tensor)
             
-	outputs1 = self.softmax(outputs1)
+        outputs1 = self.softmax(outputs1)
 
         if USE_CUDA:
             outputs1 = outputs1.cuda()
@@ -657,19 +657,19 @@ def train_NN(graph, model_engine, forward_pass_only):
         # normalize inputs
         NN_input = NN_input / 255
 
-	if USE_DEEPSPEED:
-	    NN_input = NN_input.to(model_engine.local_rank) 
-	    NN_train_labels = NN_train_labels.to(model_engine.local_rank)
+        if USE_DEEPSPEED:
+            NN_input = NN_input.to(model_engine.local_rank) 
+            NN_train_labels = NN_train_labels.to(model_engine.local_rank)
 
         if forward_pass_only == 0:
             # zero the parameter gradients
             optimizer1.zero_grad()
 
             #  do train thing for internal NN function weights
-	    if USE_DEEPSPEED:
-		NN_output = model_engine(NN_input)
+            if USE_DEEPSPEED:
+                NN_output = model_engine(NN_input)
 
-	    else:
+            else:
             	NN_output = graph.forward(NN_input, types="f")
 
         if VISUALIZER:
@@ -696,11 +696,11 @@ def train_NN(graph, model_engine, forward_pass_only):
             if DEBUG:
                 Ltrain.register_hook(lambda x: print(x))
 
-	    if USE_DEEPSPEED:
-		model_engine.backward(Ltrain)
+            if USE_DEEPSPEED:
+                model_engine.backward(Ltrain)
 
-	    else:
-		Ltrain.backward(retain_graph=True)
+            else:
+                Ltrain.backward(retain_graph=True)
 
             if DEBUG:
                 print("starts to print graph.named_parameters()")
@@ -716,10 +716,10 @@ def train_NN(graph, model_engine, forward_pass_only):
 
                 print("finished gradwalk()")
 
-	    if USE_DEEPSPEED:
-		model_engine.step()
+            if USE_DEEPSPEED:
+                model_engine.step()
 
-	    else:
+            else:
             	optimizer1.step()
 
             # graph.reinit()
@@ -785,7 +785,7 @@ def train_architecture(graph, model_engine, forward_pass_only, train_or_val='val
         output2_tensor = graph.cells[NUM_OF_CELLS - 1].output
         output2_tensor = output2_tensor.view(output2_tensor.shape[0], -1)
 
-	output2_tensor = output2_tensor * DECAY_FACTOR
+        output2_tensor = output2_tensor * DECAY_FACTOR
 
         if USE_CUDA:
             output2_tensor = output2_tensor.cuda()
@@ -820,7 +820,7 @@ def train_architecture(graph, model_engine, forward_pass_only, train_or_val='val
             Lval.backward(retain_graph=True)
 
 	    # stores a copy of Lval for later usage
-	    graph.Lval_backup = Lval
+            graph.Lval_backup = Lval
 
             if DEBUG:
                 for name, param in graph.named_parameters():
@@ -892,7 +892,7 @@ def train_architecture(graph, model_engine, forward_pass_only, train_or_val='val
     return Lval - sigma * L2train_Lval
 
 
- def add_argument():
+def add_argument():
 
      parser=argparse.ArgumentParser(description='CIFAR')
 
@@ -929,8 +929,8 @@ if __name__ == "__main__":
         graph_ = graph_.cuda()
 
     if USE_DEEPSPEED:
-	parameters = filter(lambda p: p.requires_grad, graph_.parameters()) 
-	args_ = add_argument()
+        parameters = filter(lambda p: p.requires_grad, graph_.parameters()) 
+        args_ = add_argument()
 
         # Initialize DeepSpeed to use the following features
         # 1) Distributed model
