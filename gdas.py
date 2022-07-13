@@ -13,6 +13,14 @@ import tensorflow as tf
 
 # import numpy as np
 
+# deepspeed zero offload https://www.deepspeed.ai/getting-started/
+# https://github.com/microsoft/DeepSpeed/issues/2029
+USE_DEEPSPEED = 1
+
+if USE_DEEPSPEED:
+    import argparse
+    import deepspeed
+
 VISUALIZER = 0
 DEBUG = 0
 logdir = 'runs/gdas_experiment_1'
@@ -37,7 +45,7 @@ USE_CUDA = torch.cuda.is_available()
 
 # https://arxiv.org/pdf/1806.09055.pdf#page=12
 TEST_DATASET_RATIO = 0.5  # 50 percent of the dataset is dedicated for testing purpose
-BATCH_SIZE = 16
+BATCH_SIZE = 8
 NUM_OF_IMAGE_CHANNELS = 3  # RGB
 IMAGE_HEIGHT = 32
 IMAGE_WIDTH = 32
@@ -152,6 +160,7 @@ class Edge(nn.Module):
             y_hat = self.forward_f(x)
 
         elif types == "edge":
+	    y_hat.requires_grad_()
             y_hat = self.forward_edge(x)
 
         return y_hat
@@ -228,7 +237,7 @@ class Connection(nn.Module):
         self.combined_feature_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
                                                 requires_grad=False)
         self.combined_edge_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
-                                             requires_grad=False)
+                                             requires_grad=True)
 
         if USE_CUDA:
             self.combined_feature_map = self.combined_feature_map.cuda()
@@ -245,7 +254,7 @@ class Connection(nn.Module):
         self.combined_feature_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
                                                 requires_grad=False)
         self.combined_edge_map = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
-                                                requires_grad=False)
+                                                requires_grad=True)
 
         if USE_CUDA:
             self.combined_feature_map = self.combined_feature_map.cuda()
@@ -260,8 +269,13 @@ class Connection(nn.Module):
             edges_results = edges_results.cuda()
 
         for e in range(NUM_OF_MIXED_OPS):
-	    with torch.no_grad():
-            	edges_results = edges_results + self.edges[e].forward(x, types)
+	    if types == "edge":
+		edges_results.requires_grad_()    
+              	edges_results = edges_results + self.edges[e].forward(x, types)
+
+	    else:
+            	with torch.no_grad():
+		    edges_results = edges_results + self.edges[e].forward(x, types)
 
         return edges_results * DECAY_FACTOR
 
@@ -308,6 +322,7 @@ class Node(nn.Module):
                 value = self.connections[cc].combined_feature_map
 
             else:  # "edge"
+		value.requires_grad_()
                 value = self.connections[cc].combined_edge_map
 
             # combines all the feature maps from different mixed ops edges
@@ -366,7 +381,14 @@ class Cell(nn.Module):
         value = torch.zeros([BATCH_SIZE, NUM_OF_IMAGE_CHANNELS, IMAGE_HEIGHT, IMAGE_WIDTH],
                             requires_grad=False)
 
+	if types == "edge":
+	    value.requires_grad_()
+	    self.output.requires_grad_()
+
         for n in range(NUM_OF_NODES_IN_EACH_CELL):
+	    if types == "edge":
+	        self.nodes[n].output.requires_grad_()
+
             if c <= 1:
                 if n == 0:
                     # Uses datasets as input
@@ -524,8 +546,6 @@ class Graph(nn.Module):
 
         # encodes the cells and nodes arrangement in the multigraph
 
-        outputs1 = 0  # just for initialization, no special meaning
-
         for c in range(NUM_OF_CELLS):
             x1 = self.cells[c - 1].output
             x2 = self.cells[c - PREVIOUS_PREVIOUS].output
@@ -604,14 +624,9 @@ def Convert_ONNX(model, model_input):
 
 
 # https://translate.google.com/translate?sl=auto&tl=en&u=http://khanrc.github.io/nas-4-darts-tutorial.html
-def train_NN(forward_pass_only):
+def train_NN(graph, model_engine, forward_pass_only):
     if DEBUG:
         print("Entering train_NN(), forward_pass_only = ", forward_pass_only)
-
-    graph = Graph()
-
-    if USE_CUDA:
-        graph = graph.cuda()
 
     if DEBUG:
         modules = graph.named_children()
@@ -628,9 +643,7 @@ def train_NN(forward_pass_only):
 
     # just for initialization, no special meaning
     Ltrain = 0
-    NN_input = 0
     NN_output = torch.tensor(0)
-    NN_train_labels = 0
 
     for train_data, val_data in (zip(trainloader, valloader)):
 
@@ -644,12 +657,20 @@ def train_NN(forward_pass_only):
         # normalize inputs
         NN_input = NN_input / 255
 
+	if USE_DEEPSPEED:
+	    NN_input = NN_input.to(model_engine.local_rank) 
+	    NN_train_labels = NN_train_labels.to(model_engine.local_rank)
+
         if forward_pass_only == 0:
             # zero the parameter gradients
             optimizer1.zero_grad()
 
             #  do train thing for internal NN function weights
-            NN_output = graph.forward(NN_input, types="f")
+	    if USE_DEEPSPEED:
+		NN_output = model_engine(NN_input)
+
+	    else:
+            	NN_output = graph.forward(NN_input, types="f")
 
         if VISUALIZER:
             # netron https://docs.microsoft.com/zh-cn/windows/ai/windows-ml/tutorials/pytorch-convert-model
@@ -675,7 +696,11 @@ def train_NN(forward_pass_only):
             if DEBUG:
                 Ltrain.register_hook(lambda x: print(x))
 
-            Ltrain.backward(retain_graph=True)
+	    if USE_DEEPSPEED:
+		model_engine.backward(Ltrain)
+
+	    else:
+		Ltrain.backward(retain_graph=True)
 
             if DEBUG:
                 print("starts to print graph.named_parameters()")
@@ -691,7 +716,12 @@ def train_NN(forward_pass_only):
 
                 print("finished gradwalk()")
 
-            optimizer1.step()
+	    if USE_DEEPSPEED:
+		model_engine.step()
+
+	    else:
+            	optimizer1.step()
+
             # graph.reinit()
 
         else:
@@ -712,25 +742,13 @@ def train_NN(forward_pass_only):
     return Ltrain
 
 
-def train_architecture(forward_pass_only, train_or_val='val'):
+def train_architecture(graph, model_engine, forward_pass_only, train_or_val='val'):
     if DEBUG:
         print("Entering train_architecture(), forward_pass_only = ", forward_pass_only, " , train_or_val = ",
               train_or_val)
 
-    graph = Graph()
-
-    if USE_CUDA:
-        graph = graph.cuda()
-
     criterion = nn.CrossEntropyLoss()
     optimizer2 = optim.SGD(graph.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
-
-    # just for initialization, no special meaning
-    Lval = 0
-    train_inputs = 0
-    train_labels = 0
-    val_inputs = 0
-    val_labels = 0
 
     if forward_pass_only == 0:
         #  do train thing for architecture edge weights
@@ -837,7 +855,8 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                         w = w + epsilon * Lval
 
     # test NN to obtain loss
-    Ltrain_plus = train_architecture(forward_pass_only=1, train_or_val='train')
+    Ltrain_plus = train_architecture(graph=graph, model_engine=model_engine, 
+                                     forward_pass_only=1, train_or_val='train')
 
     # replaces f_weights with weight_minus before NN training
     for c in range(NUM_OF_CELLS):
@@ -851,7 +870,8 @@ def train_architecture(forward_pass_only, train_or_val='val'):
                         w = w - 2 * epsilon * Lval
 
     # test NN to obtain loss
-    Ltrain_minus = train_architecture(forward_pass_only=1, train_or_val='train')
+    Ltrain_minus = train_architecture(graph=graph, model_engine=model_engine,
+                                      forward_pass_only=1, train_or_val='train')
 
     # Restores original f_weights
     for c in range(NUM_OF_CELLS):
@@ -872,14 +892,59 @@ def train_architecture(forward_pass_only, train_or_val='val'):
     return Lval - sigma * L2train_Lval
 
 
+ def add_argument():
+
+     parser=argparse.ArgumentParser(description='CIFAR')
+
+     #data
+     # cuda
+     parser.add_argument('--with_cuda', default=False, action='store_true',
+                         help='use CPU in case there\'s no GPU support')
+     parser.add_argument('--use_ema', default=False, action='store_true',
+                         help='whether use exponential moving average')
+
+     # train
+     parser.add_argument('-b', '--batch_size', default=32, type=int,
+                         help='mini-batch size (default: 32)')
+     parser.add_argument('-e', '--epochs', default=30, type=int,
+                         help='number of total epochs (default: 30)')
+     parser.add_argument('--local_rank', type=int, default=-1,
+                        help='local rank passed from distributed launcher')
+
+     # Include DeepSpeed configuration arguments
+     parser = deepspeed.add_config_arguments(parser)
+
+     args=parser.parse_args()
+
+     return args
+
+
 if __name__ == "__main__":
     run_num = 0
     not_converged = 1
 
+    graph_ = Graph()
+
+    if USE_CUDA:
+        graph_ = graph_.cuda()
+
+    if USE_DEEPSPEED:
+	parameters = filter(lambda p: p.requires_grad, graph_.parameters()) 
+	args_ = add_argument()
+
+        # Initialize DeepSpeed to use the following features
+        # 1) Distributed model
+        # 2) Distributed data loader
+        # 3) DeepSpeed optimizer
+        model_engine_, optimizer, trainloader, __ = deepspeed.initialize(args=args_, model=graph_, model_parameters=parameters, training_data=trainset)
+
+    else:
+        model_engine_ = None
+
     while not_converged:
         print("run_num = ", run_num)
 
-        ltrain = train_NN(forward_pass_only=0)
+        ltrain = train_NN(graph=graph_, model_engine=model_engine_, forward_pass_only=0)
         print("Finished train_NN()")
 
         if VISUALIZER or DEBUG:
@@ -887,7 +952,7 @@ if __name__ == "__main__":
                 break  # visualizer does not need more than a single run
 
         # 'train_or_val' to differentiate between using training dataset and validation dataset
-        lval = train_architecture(forward_pass_only=0, train_or_val='val')
+        lval = train_architecture(graph=graph_, model_engine=model_engine_, forward_pass_only=0, train_or_val='val')
         print("Finished train_architecture()")
 
         print("lval = ", lval, " , ltrain = ", ltrain)
@@ -896,5 +961,3 @@ if __name__ == "__main__":
         run_num = run_num + 1
 
     #  do test thing
-
-
