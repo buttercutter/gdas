@@ -697,7 +697,7 @@ def train_NN(graph, model_engine, forward_pass_only):
                 Ltrain.register_hook(lambda x: print(x))
 
             if USE_DEEPSPEED:
-                model_engine.backward(Ltrain)
+                model_engine.backward(Ltrain, retain_graph=True)
 
             else:
                 Ltrain.backward(retain_graph=True)
