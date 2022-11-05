@@ -1,5 +1,5 @@
 {
-    "train_micro_batch_size_per_gpu": 8,
+    "train_micro_batch_size_per_gpu": 4,
     "steps_per_print": 1, 
     "optimizer": {
         "type": "AdamW",

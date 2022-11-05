@@ -45,7 +45,12 @@ USE_CUDA = torch.cuda.is_available()
 
 # https://arxiv.org/pdf/1806.09055.pdf#page=12
 TEST_DATASET_RATIO = 0.5  # 50 percent of the dataset is dedicated for testing purpose
-BATCH_SIZE = 8
+
+if USE_DEEPSPEED:
+    BATCH_SIZE = 4
+else:
+    BATCH_SIZE = 8
+
 NUM_OF_IMAGE_CHANNELS = 3  # RGB
 IMAGE_HEIGHT = 32
 IMAGE_WIDTH = 32
