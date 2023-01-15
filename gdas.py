@@ -16,10 +16,15 @@ import tensorflow as tf
 # deepspeed zero offload https://www.deepspeed.ai/getting-started/
 # https://github.com/microsoft/DeepSpeed/issues/2029
 USE_DEEPSPEED = 1
+DEBUG_DEEPSPEED = 1  # only turns on this option whenever there are issues
 
 if USE_DEEPSPEED:
     import argparse
     import deepspeed
+    
+    if DEBUG_DEEPSPEED:
+        import config
+        from deepspeed.runtime.utils import see_memory_usage
 
 VISUALIZER = 0
 DEBUG = 0
@@ -151,8 +156,25 @@ class Edge(nn.Module):
         # https://pytorch.org/docs/stable/nn.functional.html#gumbel-softmax
         # See also https://github.com/D-X-Y/AutoDL-Projects/issues/10#issuecomment-916619163
 
+        if DEBUG_DEEPSPEED:
+            '''
+            def see_memory_usage(message, force=False):
+                if not force:
+                    return
+            '''
+            # executes see_memory_usage() only during backward pass
+            see_memory_usage(f'memory usage before gumbel_softmax', force=config.in_backward_pass)
+            
         gumbel = F.gumbel_softmax(x, tau=TAU_GUMBEL, hard=True)
+        
+        if DEBUG_DEEPSPEED:
+            see_memory_usage(f'memory usage after gumbel_softmax', force=config.in_backward_pass)
+            #see_memory_usage(f'memory usage before chosen_edge', force=config.in_backward_pass)
+            
         chosen_edge = torch.argmax(gumbel, dim=0)  # converts one-hot encoding into integer
+        
+        if DEBUG_DEEPSPEED:
+            see_memory_usage(f'memory usage after chosen_edge', force=config.in_backward_pass)
 
         return chosen_edge
 
@@ -179,7 +201,7 @@ class ConvEdge(Edge):
         # Kaiming He weight Initialization
         # https://medium.com/@shoray.goel/kaiming-he-initialization-a8d9ed0b5899
         nn.init.kaiming_uniform_(self.f.weight, mode='fan_in', nonlinearity='relu')
-        
+
 
 # class LinearEdge(Edge):
 #    def __init__(self):
@@ -572,7 +594,7 @@ class Graph(nn.Module):
 
         else:
             outputs1 = self.linears(output_tensor)
-            
+
         outputs1 = self.softmax(outputs1)
 
         if USE_CUDA:
@@ -702,7 +724,13 @@ def train_NN(graph, model_engine, forward_pass_only):
                 Ltrain.register_hook(lambda x: print(x))
 
             if USE_DEEPSPEED:
+                if DEBUG_DEEPSPEED:
+                    config.in_backward_pass = True
+                    
                 model_engine.backward(Ltrain, retain_graph=True)
+                
+                if DEBUG_DEEPSPEED:
+                    config.in_backward_pass = False
 
             else:
                 Ltrain.backward(retain_graph=True)
